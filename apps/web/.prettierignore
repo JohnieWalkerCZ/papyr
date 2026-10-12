@@ -1,0 +1,10 @@
+node_modules/
+.next/
+public/typst/
+public/tldraw/
+test-results/
+playwright-report/
+coverage/
+*.md
+next-env.d.ts
+*.tsbuildinfo

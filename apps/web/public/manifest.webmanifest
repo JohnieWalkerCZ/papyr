@@ -1,0 +1,13 @@
+{
+  "name": "Papyr",
+  "short_name": "Papyr",
+  "description": "A self-hosted, local-first notebook.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ee",
+  "theme_color": "#f5f3ee",
+  "icons": [
+    { "src": "/icons/papyr-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/papyr-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

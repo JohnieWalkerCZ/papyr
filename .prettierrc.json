@@ -1,0 +1,6 @@
+{
+  "semi": true,
+  "singleQuote": false,
+  "printWidth": 120,
+  "overrides": [{ "files": "**/*.webmanifest", "options": { "parser": "json" } }]
+}

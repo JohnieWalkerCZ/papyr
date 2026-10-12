@@ -1,0 +1,73 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_TLDRAW_LICENSE_KEY: ${NEXT_PUBLIC_TLDRAW_LICENSE_KEY:-}
+        PAPYR_API_ORIGIN: http://api:8080
+    ports:
+      - "127.0.0.1:${PAPYR_WEB_PORT:-3000}:3000"
+    networks:
+      papyr:
+        ipv4_address: ${PAPYR_WEB_IP:-172.29.0.2}
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_TLDRAW_LICENSE_KEY: ${NEXT_PUBLIC_TLDRAW_LICENSE_KEY:-}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Papyr.Api/Dockerfile
+    environment:
+      ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr;Password=${PAPYR_DB_PASSWORD:-papyr-dev-only}
+      PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
+      PAPYR_COOKIE_SECURE: ${PAPYR_COOKIE_SECURE:-false}
+      PAPYR_TRUSTED_PROXIES: ${PAPYR_WEB_IP:-172.29.0.2}
+      PAPYR_MAX_ASSET_STORAGE_BYTES: ${PAPYR_MAX_ASSET_STORAGE_BYTES:-1073741824}
+      PAPYR_ASSET_STORAGE_PATH: /data/assets
+    volumes:
+      - papyr-assets:/data/assets
+    ports:
+      - "127.0.0.1:5080:8080"
+    networks:
+      papyr:
+        ipv4_address: ${PAPYR_API_IP:-172.29.0.3}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  db:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: papyr
+      POSTGRES_USER: papyr
+      POSTGRES_PASSWORD: ${PAPYR_DB_PASSWORD:-papyr-dev-only}
+    volumes:
+      - papyr-postgres:/var/lib/postgresql/data
+    networks:
+      papyr:
+        ipv4_address: ${PAPYR_DB_IP:-172.29.0.4}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U papyr -d papyr"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  papyr-postgres:
+  papyr-assets:
+
+networks:
+  papyr:
+    ipam:
+      config:
+        - subnet: ${PAPYR_NETWORK_SUBNET:-172.29.0.0/24}

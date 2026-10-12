@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Papyr.Api/Papyr.Api.csproj" />
+  <Project Path="Papyr.Tests/Papyr.Tests.csproj" />
+</Solution>

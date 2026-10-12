@@ -1,0 +1,121 @@
+{
+  "name": "Papyr Codex documentation",
+  "version": "1.0",
+  "created": "2026-10-10",
+  "documents": [
+    {
+      "file": "AGENTS.md",
+      "words": 668,
+      "bytes": 4861,
+      "sha256": "c8bed120c6dad7e0523e2a355b8496a73684a83da96b05c9bd349daa6dcd992a"
+    },
+    {
+      "file": "API.md",
+      "words": 768,
+      "bytes": 6268,
+      "sha256": "4a604f966e797efc1996e4994718fd56ad27fdeadc2eb732bfd2d6f2fb8d7535"
+    },
+    {
+      "file": "ARCHITECTURE.md",
+      "words": 578,
+      "bytes": 6079,
+      "sha256": "957b0d95825703aa453d8906d052ec22ccc54c4575c29e6ef7034786ed1fb222"
+    },
+    {
+      "file": "CODEX_PROMPTS.md",
+      "words": 464,
+      "bytes": 3541,
+      "sha256": "6a5b85c3cc6d0eeeaf63c8fe0d1db8c54467a3b6570c8702169fa02904a4f112"
+    },
+    {
+      "file": "CODING_STANDARDS.md",
+      "words": 462,
+      "bytes": 3330,
+      "sha256": "a4c8cdf33958382ea22896b0238ddf3c62dde3359dd2da664c308ee497fe80a1"
+    },
+    {
+      "file": "DATA_MODEL.md",
+      "words": 696,
+      "bytes": 5119,
+      "sha256": "8f793f440f90028e664e0fdb98f3d317542813d9b1cb12fe2cd29d0a9a0bfdc7"
+    },
+    {
+      "file": "DECISIONS.md",
+      "words": 607,
+      "bytes": 4249,
+      "sha256": "5ba314f6b5a4e6b6517a06e20de6e805155b761e851ade4be3cabbf7199eb3a3"
+    },
+    {
+      "file": "DEPLOYMENT.md",
+      "words": 581,
+      "bytes": 4433,
+      "sha256": "000a9a810ebd5cb559c0647268d02a6bc838e73fc46999e998fb34ecf8e55282"
+    },
+    {
+      "file": "DESIGN_RULES.md",
+      "words": 520,
+      "bytes": 4103,
+      "sha256": "601aca5483b3a7fdffb8cf7a96b7207433b23ae4ff2f1e7c0aa45efd731bbdd9"
+    },
+    {
+      "file": "EDITORS.md",
+      "words": 849,
+      "bytes": 6014,
+      "sha256": "4585dda8a11fb9e35e77fde51368b1daa3d499ff09ecddc7ccf8d61c691c5e6a"
+    },
+    {
+      "file": "IMPLEMENTATION_PLAN.md",
+      "words": 733,
+      "bytes": 5150,
+      "sha256": "713f2f5b41b4c73a2160fce18732cc94967ff31afd13177c737781714a6887b5"
+    },
+    {
+      "file": "PERFORMANCE.md",
+      "words": 434,
+      "bytes": 2910,
+      "sha256": "ce42de4b6917ecbda6c1d98d51d277b4f6e94e2a041909bc25f487e6a9bc152f"
+    },
+    {
+      "file": "PRODUCT.md",
+      "words": 864,
+      "bytes": 6089,
+      "sha256": "6f5fb9bf9f0fcc96b7d595d8961acf7dd5196d4bf87bd5be13dca6732c1fd483"
+    },
+    {
+      "file": "README.md",
+      "words": 415,
+      "bytes": 3423,
+      "sha256": "a1d1b5fc0cb8d4d6bafb17d95a37b3f11852f95607e45d83875797b7d889d2af"
+    },
+    {
+      "file": "SECURITY.md",
+      "words": 564,
+      "bytes": 4290,
+      "sha256": "b63b621084fe5b7d753792fb490d250f76a6b9c25c2818996c3dd63f09ee2743"
+    },
+    {
+      "file": "SYNC.md",
+      "words": 1140,
+      "bytes": 7928,
+      "sha256": "ed5522865bd608de112d9c82732de9fa1093f7c22767d86efb2aa58581c64f1a"
+    },
+    {
+      "file": "TECH_STACK.md",
+      "words": 521,
+      "bytes": 3569,
+      "sha256": "9716b69327153d535de1fc4c89faf83a36409724a65d72748502e82d30dff994"
+    },
+    {
+      "file": "TESTING.md",
+      "words": 682,
+      "bytes": 4430,
+      "sha256": "1c8b2c4b50455a7ef0a0cd6687192b9837591a3fb788517ab5b337b05f65f6b4"
+    },
+    {
+      "file": "UI_UX.md",
+      "words": 694,
+      "bytes": 6057,
+      "sha256": "4a39ac50189dbad661c35625e99be08f56fa5103486b67659d40796825524777"
+    }
+  ]
+}

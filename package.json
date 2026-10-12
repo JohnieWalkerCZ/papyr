@@ -1,0 +1,16 @@
+{
+  "name": "papyr",
+  "private": true,
+  "packageManager": "pnpm@11.12.0",
+  "scripts": {
+    "dev": "pnpm --filter @papyr/web dev",
+    "build": "pnpm --filter @papyr/web build",
+    "format": "pnpm --filter @papyr/web format",
+    "lint": "pnpm --filter @papyr/web lint",
+    "typecheck": "pnpm --filter @papyr/web typecheck",
+    "test": "pnpm --filter @papyr/web test",
+    "test:e2e": "pnpm --filter @papyr/web test:e2e",
+    "api:build": "dotnet build apps/api/Papyr.Api/Papyr.Api.csproj",
+    "api:test": "dotnet test apps/api/Papyr.Tests/Papyr.Tests.csproj"
+  }
+}

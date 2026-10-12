@@ -1,0 +1,63 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: papyr
+          POSTGRES_USER: papyr
+          POSTGRES_PASSWORD: papyr-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U papyr -d papyr"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      PAPYR_TEST_CONNECTION: Host=localhost;Database=papyr;Username=papyr;Password=papyr-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.12.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm --filter @papyr/web test:unit
+      - run: pnpm --filter @papyr/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Start API for cross-device browser tests
+        run: |
+          export ConnectionStrings__Papyr="$PAPYR_TEST_CONNECTION"
+          export PAPYR_INITIAL_SETUP_TOKEN="papyr-ci-setup-token-with-more-than-32-characters"
+          export PAPYR_COOKIE_SECURE=false
+          export PAPYR_ASSET_STORAGE_PATH=/tmp/papyr-ci-assets
+          docker run -d --name papyr-ci-api --network host \
+            -e ConnectionStrings__Papyr -e PAPYR_INITIAL_SETUP_TOKEN \
+            -e PAPYR_COOKIE_SECURE -e PAPYR_ASSET_STORAGE_PATH \
+            -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
+            dotnet run --project apps/api/Papyr.Api --urls http://127.0.0.1:5081
+          for attempt in $(seq 1 60); do
+            if curl --fail http://localhost:5081/health/ready; then exit 0; fi
+            sleep 2
+          done
+          docker logs papyr-ci-api
+          exit 1
+      - run: pnpm --filter @papyr/web test:sync-e2e
+        env:
+          PAPYR_TEST_SETUP_TOKEN: papyr-ci-setup-token-with-more-than-32-characters
+      - if: always()
+        run: docker rm -f papyr-ci-api || true
+      - run: docker run --rm --network host -e PAPYR_TEST_CONNECTION -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 dotnet test apps/api/Papyr.slnx

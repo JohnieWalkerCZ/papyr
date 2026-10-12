@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+.next/
+apps/web/public/typst/
+apps/web/public/tldraw/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/api/**/bin/
+apps/api/**/obj/
+.env
+.env.*
+!.env.example
