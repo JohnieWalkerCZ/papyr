@@ -46,6 +46,12 @@ docker compose -f infra/compose.yaml down
 
 `down` preserves the named volumes. `docker compose down -v` deletes database and attachment volumes and permanently removes server data; do not use it as a routine stop command.
 
+## Deploy with Portainer
+
+Create a Stack from the Git repository and set the Compose path to `infra/compose.yaml`. In Portainer's **Environment variables** section, either add the keys from `.env.example` individually or use **Load variables from .env file** with a private copy whose sample database password has been replaced. Portainer makes these values available for Compose `${VARIABLE}` substitution; the Compose file passes each value to the web, API, or database service as needed. Do not add an `env_file: .env` entry to the stack.
+
+Set `PAPYR_DB_PASSWORD` and `PAPYR_INITIAL_SETUP_TOKEN` to unique strong values before deployment. Set `PAPYR_COOKIE_SECURE=true` when the public site uses HTTPS. `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` is optional and is consumed during the web image build; after changing it, rebuild and redeploy the stack. Keep `PAPYR_MIGRATE_ON_STARTUP=true` for the supplied single-API stack. Keep the stack environment values private and restrict stack access to administrators.
+
 ## Public HTTPS hosting
 
 Use a reverse proxy or load balancer that terminates TLS and forwards the same public hostname to the `web` service. The web app routes `/api/v1/` and `/hubs/` to the API, so clients should use one origin. Preserve those paths, allow WebSocket upgrades for `/hubs/`, and set request and proxy timeouts high enough for attachment uploads. Enable HTTPS before users sign in.
@@ -65,16 +71,19 @@ The Compose file currently applies EF Core database migrations when the API star
 
 ## Configuration
 
-The supplied `infra/compose.yaml` reads these values from `.env`:
+The supplied `infra/compose.yaml` reads these values from a local `.env` file in Docker Compose or from Portainer's stack environment variables:
 
 | Variable | Purpose | Guidance |
 | --- | --- | --- |
 | `PAPYR_DB_PASSWORD` | PostgreSQL password for the `papyr` role | Required for any hosted use; replace the Compose development fallback. |
 | `PAPYR_INITIAL_SETUP_TOKEN` | Authorizes first-owner creation | At least 32 characters; remove after setup. |
 | `PAPYR_COOKIE_SECURE` | Requires secure session cookies | Set `true` when served over HTTPS. |
+| `PAPYR_CHANGE_RETENTION_DAYS` | Change-event retention | Defaults to 90; valid range is 1–3650. |
+| `PAPYR_MIGRATE_ON_STARTUP` | Apply EF Core migrations when the API starts | Defaults to `true`; see the multi-replica note above. |
+| `PAPYR_MAX_ASSET_STORAGE_BYTES` | Per-owner attachment quota | Defaults to 1 GiB. |
+| `PAPYR_WEB_PORT` | Host port published for the web service | Defaults to 3000; keep the service private behind the proxy. |
+| `PAPYR_NETWORK_SUBNET`, `PAPYR_WEB_IP`, `PAPYR_API_IP`, `PAPYR_DB_IP` | Private Compose network addressing | Change together only if the default subnet overlaps another Docker network. |
 | `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | Build-time whiteboard license key | Optional; use only with a license valid for this deployment. |
-
-The API also accepts `PAPYR_CHANGE_RETENTION_DAYS` (default 90, valid range 1–3650) and `PAPYR_MIGRATE_ON_STARTUP` (default true). If you need either in Compose, add it to the API service's `environment` section; the supplied Compose file does not currently pass these variables from `.env`.
 
 The Next.js API origin is set at image build time through `PAPYR_API_ORIGIN` (the supplied Compose build sets it to `http://api:8080`). For a custom deployment, preserve the internal API origin reachable by the web container. The public browser-facing API path remains same-origin through Next.js rewrites.
 

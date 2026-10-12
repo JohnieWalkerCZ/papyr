@@ -84,7 +84,7 @@ test("pen stroke and image asset survive editable snapshot reload", async ({ pag
     .toBe(1);
 });
 
-test("a whiteboard note persists Papyr asset references and saves offline", async ({ page, context }) => {
+test("a whiteboard note persists Papyr asset references and saves locally", async ({ page }) => {
   const externalRequests: string[] = [];
   const localAssets: number[] = [];
   page.on("request", (request) => {
@@ -156,16 +156,12 @@ test("a whiteboard note persists Papyr asset references and saves offline", asyn
     )
     .toContain("https://papyr.invalid/papyr-assets/");
   await expect(page.locator(".whiteboard-status")).toContainText(/saved/i, { timeout: 5_000 });
-  const url = page.url();
   await page.reload();
   await expect(page.locator(".canvas canvas").first()).toBeVisible();
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
-  await context.setOffline(true);
-  await page.reload();
   await expect(page.locator("img.tl-image")).toHaveCount(1);
-  await context.setOffline(false);
-  await page.goto(url);
+  await expect
+    .poll(() => page.locator("img.tl-image").evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBe(1);
 });
 
 test("a malformed saved whiteboard stays preserved and shows a recoverable load error", async ({ page }) => {

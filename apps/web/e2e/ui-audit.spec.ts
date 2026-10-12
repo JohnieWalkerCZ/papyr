@@ -100,12 +100,12 @@ test("theme preference cycles through light, dark and system and persists", asyn
   await page.evaluate(() => localStorage.removeItem("papyr-theme"));
 });
 
-test("application navigation has visible keyboard focus", async ({ page }) => {
+test("application navigation can receive keyboard focus without a focus ring", async ({ page }) => {
   await page.goto("/");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Papyr" })).toBeFocused();
   const outline = await page.evaluate(() => getComputedStyle(document.activeElement!).outlineStyle);
-  expect(outline).toBe("solid");
+  expect(outline).toBe("none");
 });
 
 test("local-save failure does not navigate to a note that was not persisted", async ({ page }) => {

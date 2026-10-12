@@ -98,9 +98,15 @@ test("switching between open notes saves edits only to the selected note", async
 
   await page.goto("/");
   await createNote(page, "Switch second");
-  await page.getByRole("link", { name: "Switch first", exact: true }).click();
+  const firstLink = page.getByRole("link", { name: "Switch first", exact: true });
+  const firstUrl = new URL((await firstLink.getAttribute("href"))!, page.url()).href;
+  await firstLink.click();
+  await expect(page).toHaveURL(firstUrl);
   await expect(editor).toContainText("first note");
-  await page.getByRole("link", { name: "Switch second", exact: true }).click();
+  const secondLink = page.getByRole("link", { name: "Switch second", exact: true });
+  const secondUrl = new URL((await secondLink.getAttribute("href"))!, page.url()).href;
+  await secondLink.click();
+  await expect(page).toHaveURL(secondUrl);
   await page.getByRole("textbox", { name: "Markdown source" }).fill("second note edited");
   await expect.poll(() => localNoteContent(page, "Switch first")).toBe("first note");
   await expect.poll(() => localNoteContent(page, "Switch second")).toBe("second note edited");
@@ -202,6 +208,7 @@ test("new Markdown note and pending create survive offline reload", async ({ pag
   await context.setOffline(true);
   await createNote(page, "Offline notes");
   await page.getByRole("link", { name: "Papyr" }).click();
+  await expect(page).toHaveURL("http://localhost:3001/");
   await expect(page.getByRole("link", { name: "Offline notes", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("link", { name: "Offline notes", exact: true })).toBeVisible();
