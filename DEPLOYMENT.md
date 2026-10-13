@@ -11,7 +11,7 @@ This guide runs Papyr as a private, single-owner service with Docker Compose. Th
 
 The database and asset volumes hold server data. Browser IndexedDB holds local copies and pending edits; it is not part of the server backup.
 
-Compose publishes the web and API ports on `127.0.0.1` only. A reverse proxy on the Docker host can reach those local ports; a proxy container can reach the services over the Compose network. PostgreSQL has no published host port.
+Compose publishes the web port on all host interfaces at `PAPYR_WEB_PORT` (6767 by default) and the API on `127.0.0.1:5080`. Protect port 6767 with a host firewall and preferably put a TLS reverse proxy in front of it before allowing sign-ins. PostgreSQL has no published host port.
 
 ## Start a private instance
 
@@ -31,7 +31,7 @@ Requirements: Docker Engine and Docker Compose plugin. From the repository root:
    docker compose -f infra/compose.yaml up -d --build
    ```
 
-3. Check API health at `http://localhost:5080/health/live` and `http://localhost:5080/health/ready`, then open `http://localhost:3000`.
+3. Check API health at `http://localhost:5080/health/live` and `http://localhost:5080/health/ready`, then open `http://localhost:6767`.
 
 4. In the web app, choose **First setup** and enter the configured setup token, a username, and a password (minimum 12 characters). This creates the only owner account. Save the username and password in your password manager. The setup token is only needed for this initial setup; remove it from `.env` after setup and restart the API container. Do not share the token or expose the setup screen to untrusted users before setup completes.
 
@@ -52,7 +52,7 @@ Create a Stack from the Git repository and set the Compose path to `infra/compos
 
 Set `PAPYR_DB_PASSWORD` and `PAPYR_INITIAL_SETUP_TOKEN` to unique strong values before deployment. Set `PAPYR_COOKIE_SECURE=true` when the public site uses HTTPS. `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` is optional and is consumed during the web image build; after changing it, rebuild and redeploy the stack. Keep `PAPYR_MIGRATE_ON_STARTUP=true` for the supplied single-API stack. Keep the stack environment values private and restrict stack access to administrators.
 
-The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all four values consistently.
+The web app is available on host port `6767` by default (container port `3000`). Set `PAPYR_WEB_PORT=6767` in Portainer if it has a previous value saved. This port listens on all host interfaces. The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all four values consistently.
 
 ## Public HTTPS hosting
 
@@ -63,11 +63,11 @@ For a public deployment:
 - Set `PAPYR_COOKIE_SECURE=true` in the API environment.
 - Configure `PAPYR_TRUSTED_PROXIES` with only the actual immediate proxy addresses. Compose assigns the web container a stable private IP; external proxies must overwrite forwarded headers rather than pass client-supplied values through. If the default Compose subnet overlaps another network, change the subnet and all three service IPs together.
 - Set `PAPYR_MAX_ASSET_STORAGE_BYTES` to the desired per-owner attachment quota (default 1 GiB). Keep one API instance unless quota enforcement is coordinated across replicas.
-- Publish only the HTTPS proxy. Keep web/API ports on loopback or the private Compose network; never publish PostgreSQL port 5432.
+- Publish only the HTTPS proxy to the internet. Restrict host port 6767 to the proxy or trusted networks; keep API port 5080 local and never publish PostgreSQL port 5432.
 - Replace the development database password with a unique secret. Use a separate strong one-time setup token, then remove it after owner creation.
 - Keep the PostgreSQL and asset volumes on durable storage with restricted host permissions.
 - Use a valid `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` only after confirming that the license covers the actual use and host. It is embedded into the browser build; treat it as a public client key, not as a server secret. Without an applicable key, production whiteboards are blocked.
-- Build and deploy a pinned, reviewed image. The provided Compose file publishes web and API ports on loopback; keep the proxy as the only public service.
+- Build and deploy a pinned, reviewed image. Keep the TLS proxy as the only public service.
 
 The Compose file currently applies EF Core database migrations when the API starts. Run one API replica during upgrades. For multi-replica operation, disable startup migrations and run a controlled migration job before deploying the replicas. Do not set `PAPYR_MIGRATE_ON_STARTUP=false` without providing that migration step.
 
@@ -83,7 +83,7 @@ The supplied `infra/compose.yaml` reads these values from a local `.env` file in
 | `PAPYR_CHANGE_RETENTION_DAYS` | Change-event retention | Defaults to 90; valid range is 1–3650. |
 | `PAPYR_MIGRATE_ON_STARTUP` | Apply EF Core migrations when the API starts | Defaults to `true`; see the multi-replica note above. |
 | `PAPYR_MAX_ASSET_STORAGE_BYTES` | Per-owner attachment quota | Defaults to 1 GiB. |
-| `PAPYR_WEB_PORT` | Host port published for the web service | Defaults to 3000; keep the service private behind the proxy. |
+| `PAPYR_WEB_PORT` | Host port published for the web service | Defaults to 6767; keep the service private behind the proxy. |
 | `PAPYR_NETWORK_SUBNET`, `PAPYR_WEB_IP`, `PAPYR_API_IP`, `PAPYR_DB_IP` | Private Compose network addressing | Change together only if the default subnet overlaps another Docker network. |
 | `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | Build-time whiteboard license key | Optional; use only with a license valid for this deployment. |
 

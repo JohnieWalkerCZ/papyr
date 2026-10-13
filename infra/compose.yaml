@@ -7,7 +7,7 @@ services:
         NEXT_PUBLIC_TLDRAW_LICENSE_KEY: ${NEXT_PUBLIC_TLDRAW_LICENSE_KEY:-}
         PAPYR_API_ORIGIN: http://api:8080
     ports:
-      - "127.0.0.1:${PAPYR_WEB_PORT:-3000}:3000"
+      - "${PAPYR_WEB_PORT:-6767}:3000"
     networks:
       papyr:
         ipv4_address: ${PAPYR_WEB_IP:-10.253.0.2}

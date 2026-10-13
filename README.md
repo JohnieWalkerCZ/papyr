@@ -39,7 +39,7 @@ For a quick local instance, install Docker with Compose, then run:
 docker compose -f infra/compose.yaml up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The API health endpoints are [live](http://localhost:5080/health/live) and [ready](http://localhost:5080/health/ready). Compose binds both services to loopback; use a TLS reverse proxy for remote access.
+Open [http://localhost:6767](http://localhost:6767). The API health endpoints are [live](http://localhost:5080/health/live) and [ready](http://localhost:5080/health/ready). Compose publishes the web port on all host interfaces; use a TLS reverse proxy and firewall rules for remote access. The API remains bound to loopback.
 
 For web hot reload while API and PostgreSQL run in Docker, install Node.js 24.18.0, pnpm 11.12.0, and the .NET 10 SDK, then run:
 
