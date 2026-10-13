@@ -87,6 +87,8 @@ For a public deployment:
 
 The Compose file currently applies EF Core database migrations when the API starts. Run one API replica during upgrades. For multi-replica operation, disable startup migrations and run a controlled migration job before deploying the replicas. Do not set `PAPYR_MIGRATE_ON_STARTUP=false` without providing that migration step.
 
+If startup migrations fail, the API keeps listening in diagnostic mode and Settings reports the safe database failure code. All application requests are rejected with `503`; `/health/ready` is also `503`, while `/health/live` reports `status: "diagnostic"`. The supplied TCP healthcheck permits the web service to start and display the cause. Fix the configuration and restart the API to retry migrations. A failure before the application can run, such as an image/runtime failure, still requires startup logs.
+
 ## Configuration
 
 The supplied `infra/compose.yaml` reads these values from a local `.env` file in Docker Compose or from Portainer's stack environment variables:

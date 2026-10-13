@@ -5,6 +5,7 @@ namespace Papyr.Api.Sync;
 
 public sealed class ChangeRetentionService(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ChangeRetentionService> logger) : BackgroundService
 {
+    public bool StartupCompleted { get; set; }
     private readonly int retentionDays = Math.Clamp(
         int.TryParse(configuration["PAPYR_CHANGE_RETENTION_DAYS"], out var configuredDays) ? configuredDays : 90,
         1,
@@ -12,6 +13,7 @@ public sealed class ChangeRetentionService(IServiceScopeFactory scopeFactory, IC
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!StartupCompleted) return;
         using var timer = new PeriodicTimer(TimeSpan.FromHours(24));
         while (!stoppingToken.IsCancellationRequested)
         {

@@ -1,5 +1,10 @@
 # DECISIONS.md — architecture decision log
 
+### Deployment diagnostics — failed startup migrations (2026-10-13)
+
+- A startup migration failure starts a restricted diagnostic listener instead of terminating before setup-status can report the database error. All application requests return `503`; only liveness returns `200` with an explicit diagnostic status. Readiness remains unavailable. No authentication, hosted retention service, or mutation endpoints are enabled in this mode.
+- Preserve startup migration enforcement and the existing safe exception classifier; restart after correcting configuration to retry. Do not skip migrations or alter persisted credentials/data to get a healthy response. Full exceptions stay in API logs; the browser receives only a safe code/message and a diagnostic reference.
+
 ### Deployment diagnostics — setup-status web route (2026-10-13)
 
 - Handle only the read-only setup-status request in a Next.js route before the general API rewrites, preserving the existing configured API origin and session cookie. Return safe transport error codes in the existing error envelope so an administrator without container-log access can distinguish refused connections, Docker DNS failures, timeouts, and reachable API errors.

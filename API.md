@@ -14,6 +14,8 @@ This is the current v1 wire contract. Base URL: same-origin `/api/v1`. HTTPS is 
 
 There is no public sign-up. First setup requires a configured 32-character-or-longer `PAPYR_INITIAL_SETUP_TOKEN` and explicit reset confirmation. It is disabled after the first account exists. Each account can access only its own notes and attachments; the initial account is the sole administrator. Existing single-owner installations migrate that account as administrator. Setup and login are rate-limited. Session cookies expire after 14 days; logout revokes the current session and disconnects its active SignalR connections.
 
+If startup database migrations fail, the API serves diagnostics only: `/health/live` returns `200` with `status: "diagnostic"`, and all other requests, including readiness, setup-status, authentication, and mutations, return `503` with the safe database diagnostic and a startup diagnostic ID. No application endpoint runs in this mode. Correct the configuration and restart the API to retry migrations; migration errors are not bypassed.
+
 ## Reading and change feed
 
 | Method and path | Purpose |
