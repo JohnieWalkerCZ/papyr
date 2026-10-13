@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, type SessionUser } from "@/lib/api-client";
 import { activateLocalAccount, resetLocalPapyrData } from "@/lib/local-db";
 import { setSyncAuthenticated, syncLocalLibrary } from "@/lib/sync";
@@ -14,11 +14,23 @@ export function AuthPanel() {
   const [setupToken, setSetupToken] = useState("");
   const [setupMode, setSetupMode] = useState(false);
   const [setupComplete, setSetupComplete] = useState(true);
+  const [setupStatusError, setSetupStatusError] = useState<ApiError | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [status, setStatus] = useState<string>(copy.checking);
   const [busy, setBusy] = useState(false);
+
+  const refreshSetupStatus = useCallback(async () => {
+    try {
+      const { complete } = await api.setupStatus();
+      setSetupComplete(complete);
+      setSetupMode(!complete);
+      setSetupStatusError(null);
+    } catch (error) {
+      setSetupStatusError(error instanceof ApiError ? error : new ApiError(copy.unavailable, 0));
+    }
+  }, [copy]);
 
   useEffect(() => {
     const onSyncState = (event: Event) => {
@@ -31,13 +43,7 @@ export function AuthPanel() {
       }
     };
     window.addEventListener("papyr-sync-state", onSyncState);
-    void api
-      .setupStatus()
-      .then(({ complete }) => {
-        setSetupComplete(complete);
-        setSetupMode(!complete);
-      })
-      .catch(() => {});
+    void Promise.resolve().then(refreshSetupStatus);
     void api
       .me()
       .then(async (session) => {
@@ -54,7 +60,7 @@ export function AuthPanel() {
         setStatus(unauthorized ? copy.loggedOut : copy.unavailable);
       });
     return () => window.removeEventListener("papyr-sync-state", onSyncState);
-  }, [copy]);
+  }, [copy, refreshSetupStatus]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,6 +157,30 @@ export function AuthPanel() {
         </>
       ) : (
         <>
+          {setupStatusError && (
+            <div className="setup-diagnostic" role="alert">
+              <strong>{copy.setupCheckFailed}</strong>
+              <p>
+                {copy.setupDiagnostic(setupStatusError.status, setupStatusError.code, setupStatusError.diagnosticId)}
+              </p>
+              <p>
+                {setupStatusError.status === 0
+                  ? copy.setupConnectionError
+                  : setupStatusError.code === "DATABASE_SCHEMA_ERROR"
+                    ? copy.setupDatabaseSchemaError
+                    : setupStatusError.code === "DATABASE_AUTH_FAILED"
+                      ? copy.setupDatabaseAuthError
+                      : setupStatusError.code === "DATABASE_NOT_FOUND"
+                        ? copy.setupDatabaseMissing
+                        : setupStatusError.code === "DATABASE_UNAVAILABLE"
+                          ? copy.setupDatabaseUnavailable
+                          : copy.setupCheckGenericError}
+              </p>
+              <button className="text-button" type="button" onClick={() => void refreshSetupStatus()}>
+                {copy.retrySetupCheck}
+              </button>
+            </div>
+          )}
           <form className="auth-form" onSubmit={(event) => void submit(event)}>
             <label>
               {copy.username}

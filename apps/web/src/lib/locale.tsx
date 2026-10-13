@@ -28,6 +28,19 @@ export const messages = {
       loggedIn: (name: string) => `Signed in as ${name}`,
       loggedOut: "Not signed in · local notes remain available",
       unavailable: "Server unavailable · local notes remain available",
+      setupCheckFailed: "Setup status check failed",
+      setupConnectionError: "Papyr could not reach the API. Check the deployment and try again.",
+      setupDiagnostic: (status: number, code?: string, diagnosticId?: string) =>
+        `HTTP ${status}${code ? ` · ${code}` : ""}${diagnosticId ? ` · reference ${diagnosticId}` : ""}`,
+      setupDatabaseSchemaError: "The database schema is incomplete. Check that API migrations completed.",
+      setupDatabaseAuthError:
+        "PostgreSQL rejected the API credentials. Check the API and database passwords in Portainer.",
+      setupDatabaseMissing: "The Papyr database was not found. Check the database name in the API settings.",
+      setupDatabaseUnavailable:
+        "The API could not connect to PostgreSQL. Check that the database container is healthy.",
+      setupCheckGenericError:
+        "The API could not check setup status. Check the API container and database configuration.",
+      retrySetupCheck: "Retry setup check",
       submit: "Working…",
       setupHelp:
         "The setup token is provided by the instance operator. First setup permanently resets server data and this app's local data, then creates the first administrator.",
@@ -299,6 +312,17 @@ export const messages = {
       loggedIn: (name: string) => `Přihlášen/a jako ${name}`,
       loggedOut: "Nejste přihlášeni · místní poznámky zůstávají dostupné",
       unavailable: "Server není dostupný · místní poznámky zůstávají dostupné",
+      setupCheckFailed: "Kontrola stavu prvního nastavení selhala",
+      setupConnectionError: "Papyr se nemůže spojit s API. Zkontrolujte nasazení a zkuste to znovu.",
+      setupDiagnostic: (status: number, code?: string, diagnosticId?: string) =>
+        `HTTP ${status}${code ? ` · ${code}` : ""}${diagnosticId ? ` · reference ${diagnosticId}` : ""}`,
+      setupDatabaseSchemaError: "Schéma databáze není úplné. Ověřte, že se dokončily migrace API.",
+      setupDatabaseAuthError:
+        "PostgreSQL odmítl přihlašovací údaje API. Zkontrolujte hesla API a databáze v Portaineru.",
+      setupDatabaseMissing: "Databáze Papyr nebyla nalezena. Zkontrolujte název databáze v nastavení API.",
+      setupDatabaseUnavailable: "API se nemůže připojit k PostgreSQL. Zkontrolujte, zda je kontejner databáze zdravý.",
+      setupCheckGenericError: "API nemůže ověřit stav nastavení. Zkontrolujte API kontejner a konfiguraci databáze.",
+      retrySetupCheck: "Zopakovat kontrolu",
       submit: "Pracuji…",
       setupHelp:
         "Instalační token poskytuje správce instance. První nastavení trvale smaže data serveru i místní data aplikace a vytvoří prvního správce.",

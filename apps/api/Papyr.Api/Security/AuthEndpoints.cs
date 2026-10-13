@@ -26,8 +26,20 @@ public static class AuthEndpoints
         }).AllowAnonymous();
 
         app.MapPost("/api/v1/setup", SetupAsync).AllowAnonymous().RequireRateLimiting("auth");
-        auth.MapGet("/setup-status", async (PapyrDbContext db, CancellationToken cancellationToken) =>
-            Results.Ok(new { complete = await db.Owners.AnyAsync(cancellationToken) }));
+        auth.MapGet("/setup-status", async (PapyrDbContext db, HttpContext context, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return Results.Ok(new { complete = await db.Owners.AnyAsync(cancellationToken) });
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                var diagnostic = SetupStatusDiagnostics.Describe(error);
+                var diagnosticId = context.TraceIdentifier;
+                loggerFactory.CreateLogger("Papyr.SetupStatus").LogError(error, "Setup status failed with {DiagnosticCode}; diagnostic id {DiagnosticId}.", diagnostic.Code, diagnosticId);
+                return Results.Json(new { error = new { code = diagnostic.Code, message = diagnostic.Message }, diagnosticId }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        });
         auth.MapPost("/login", LoginAsync).AllowAnonymous().RequireRateLimiting("auth");
         auth.MapPost("/accounts", CreateAccountAsync).RequireAuthorization(policy => policy.RequireClaim("papyr:is_admin", "true")).RequireRateLimiting("auth");
         auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { id = user.FindFirstValue(ClaimTypes.NameIdentifier), username = user.Identity?.Name, isAdmin = user.HasClaim("papyr:is_admin", "true") }))

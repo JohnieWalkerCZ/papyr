@@ -3,6 +3,7 @@ export class ApiError extends Error {
     message: string,
     readonly status: number,
     readonly code?: string,
+    readonly diagnosticId?: string,
   ) {
     super(message);
   }
@@ -69,15 +70,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 async function apiError(response: Response) {
   let code: string | undefined;
+  let diagnosticId: string | undefined;
   let message = `Papyr API request failed (${response.status}).`;
   try {
-    const body = (await response.json()) as { error?: { code?: string; message?: string }; title?: string };
+    const body = (await response.json()) as {
+      error?: { code?: string; message?: string };
+      title?: string;
+      diagnosticId?: string;
+    };
     code = body.error?.code;
+    diagnosticId = body.diagnosticId;
     message = body.error?.message || body.title || message;
   } catch {
     // Keep the safe status message when the server did not return JSON.
   }
-  return new ApiError(message, response.status, code);
+  return new ApiError(message, response.status, code, diagnosticId);
 }
 
 export const api = {

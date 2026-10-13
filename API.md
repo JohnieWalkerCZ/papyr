@@ -4,7 +4,7 @@ This is the current v1 wire contract. Base URL: same-origin `/api/v1`. HTTPS is 
 
 ## Authentication
 
-- `GET /api/v1/auth/setup-status` — reports whether initial setup has completed.
+- `GET /api/v1/auth/setup-status` — reports whether initial setup has completed; on database errors returns `503` with a safe diagnostic code and request diagnostic ID, while full exceptions remain in API logs.
 - `POST /api/v1/setup` — one-time initial administrator bootstrap, authorized with setup token and `confirmReset: true`; transactionally clears server records and clears files under configured attachment storage before creating the administrator.
 - `POST /api/v1/auth/accounts` — administrator-only account provisioning; creates a non-admin account without signing it in.
 - `POST /api/v1/auth/login` — establish authenticated session.

@@ -42,6 +42,28 @@ public sealed class AuthEndpointsTests
             });
             using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
 
+            await using (var schemaConnection = new NpgsqlConnection(testConnection.ConnectionString))
+            {
+                await schemaConnection.OpenAsync();
+                await using var renameOwners = new NpgsqlCommand("ALTER TABLE owners RENAME TO owners_unavailable", schemaConnection);
+                await renameOwners.ExecuteNonQueryAsync();
+            }
+            try
+            {
+                using var setupStatus = await client.GetAsync("/api/v1/auth/setup-status");
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, setupStatus.StatusCode);
+                var setupError = await setupStatus.Content.ReadFromJsonAsync<SetupStatusErrorResponse>();
+                Assert.Equal("DATABASE_SCHEMA_ERROR", setupError?.Error?.Code);
+                Assert.False(string.IsNullOrWhiteSpace(setupError?.DiagnosticId));
+            }
+            finally
+            {
+                await using var schemaConnection = new NpgsqlConnection(testConnection.ConnectionString);
+                await schemaConnection.OpenAsync();
+                await using var restoreOwners = new NpgsqlCommand("ALTER TABLE owners_unavailable RENAME TO owners", schemaConnection);
+                await restoreOwners.ExecuteNonQueryAsync();
+            }
+
             Directory.CreateDirectory(Path.Combine(storagePath, "stale-owner"));
             await File.WriteAllTextAsync(Path.Combine(storagePath, "stale-owner", "old.blob"), "old data");
             await using (var seedScope = factory.Services.CreateAsyncScope())
@@ -340,6 +362,8 @@ public sealed class AuthEndpointsTests
     }
 
     private sealed record CsrfResponse(string? Token);
+    private sealed record SetupStatusErrorResponse(SetupStatusError? Error, string? DiagnosticId);
+    private sealed record SetupStatusError(string? Code, string? Message);
     private sealed record IdentityResponse(Guid? Id, string? Username, bool IsAdmin);
     private sealed record NoteResponse(JsonElement? Content);
 
