@@ -222,12 +222,11 @@ export async function resolveLocalConflict(
     };
 
     if (action === "remote" || action === "copy") {
-      if (conflict.local.kind !== "note") {
-        throw new Error(
-          "Folder conflicts cannot be copied safely; keep the local version or resolve the folder first.",
-        );
+      if (action === "copy" && conflict.local.kind !== "note") {
+        throw new Error("Folder conflicts cannot be copied safely; resolve the folder in the library.");
       }
-      await saveCopy(localSnapshot as LocalNote, action === "copy");
+      if (action === "remote" && localSnapshot.kind === "note") await saveCopy(localSnapshot, false);
+      if (action === "copy") await saveCopy(localSnapshot as LocalNote, true);
       await database.outbox.where("entityId").equals(conflict.id).delete();
       await database.entities.put(conflict.remote);
     } else {

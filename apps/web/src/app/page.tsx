@@ -330,9 +330,15 @@ export default function Home() {
   }
 
   async function chooseConflict(conflict: LocalConflict, action: "remote" | "copy" | "overwrite") {
-    if (conflictBusy || (action === "remote" && conflict.local.kind !== "note")) return;
+    if (conflictBusy) return;
     const confirmation =
-      action === "overwrite" ? copy.confirmOverwrite : action === "remote" ? copy.confirmKeepServer : copy.confirmCopy;
+      action === "overwrite"
+        ? copy.confirmOverwrite
+        : action === "remote"
+          ? conflict.local.kind === "folder"
+            ? copy.confirmKeepServerFolder
+            : copy.confirmKeepServer
+          : copy.confirmCopy;
     if (!window.confirm(confirmation)) return;
     setConflictBusy(true);
     try {
@@ -1113,12 +1119,14 @@ export default function Home() {
                 <button
                   className="secondary-action"
                   type="button"
-                  disabled={conflictBusy || activeConflict.local.kind !== "note"}
+                  disabled={conflictBusy}
                   onClick={() => void chooseConflict(activeConflict, "remote")}
                 >
                   {copy.keepServer}
                 </button>
-                <p>{copy.keepServerHelp}</p>
+                <p>
+                  {activeConflict.local.kind === "folder" ? copy.keepServerFolderHelp : copy.keepServerHelp}
+                </p>
               </div>
               <div>
                 <button
