@@ -1,6 +1,7 @@
 "use client";
 
 import { createUuid } from "./uuid.js";
+import { localDb, type LocalSyncMeta } from "./local-db";
 import { useEffect, useState } from "react";
 
 export function useNoteWriteLock(noteId: string) {
@@ -12,12 +13,6 @@ export function useNoteWriteLock(noteId: string) {
     let active = true;
     let release: (() => void) | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    if (!navigator.locks) {
-      void Promise.resolve().then(() => active && setState("unsupported"));
-      return () => {
-        active = false;
-      };
-    }
     let profileId: string;
     try {
       profileId = localStorage.getItem("papyr-profile-id") ?? createUuid();
@@ -26,6 +21,66 @@ export function useNoteWriteLock(noteId: string) {
       void Promise.resolve().then(() => active && setState("unsupported"));
       return () => {
         active = false;
+      };
+    }
+    if (!navigator.locks) {
+      const lockKey = `note:${profileId}:${noteId}`;
+      const lockOwner = createUuid();
+      void localDb
+        .transaction("rw", localDb.syncMeta, async () => {
+          const current = await localDb.syncMeta.get(lockKey);
+          if (current?.lockExpiresAt && current.lockExpiresAt > Date.now()) return false;
+          const lock: LocalSyncMeta = {
+            id: lockKey,
+            cursor: null,
+            bootstrapToken: null,
+            acceptedOperationIds: [],
+            lockOwner,
+            lockExpiresAt: Date.now() + 30_000,
+            updatedAt: Date.now(),
+          };
+          await localDb.syncMeta.put(lock);
+          return true;
+        })
+        .then((acquired) => {
+          if (!active) {
+            if (acquired)
+              void localDb.transaction("rw", localDb.syncMeta, async () => {
+                if ((await localDb.syncMeta.get(lockKey))?.lockOwner === lockOwner)
+                  await localDb.syncMeta.delete(lockKey);
+              });
+            return;
+          }
+          if (!acquired) {
+            setState("locked");
+            retryTimer = setTimeout(() => active && setAttempt((value) => value + 1), 750);
+            return;
+          }
+          setHeldNoteId(noteId);
+          setState("writer");
+          const renew = () =>
+            void localDb
+              .transaction("rw", localDb.syncMeta, async () => {
+                const current = await localDb.syncMeta.get(lockKey);
+                if (current?.lockOwner === lockOwner)
+                  await localDb.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 30_000 });
+              })
+              .catch(() => active && setState("unsupported"));
+          const heartbeat = setInterval(renew, 10_000);
+          release = () => {
+            clearInterval(heartbeat);
+            void localDb.transaction("rw", localDb.syncMeta, async () => {
+              if ((await localDb.syncMeta.get(lockKey))?.lockOwner === lockOwner)
+                await localDb.syncMeta.delete(lockKey);
+            });
+          };
+        })
+        .catch(() => active && setState("unsupported"));
+      return () => {
+        active = false;
+        if (retryTimer) clearTimeout(retryTimer);
+        release?.();
+        setHeldNoteId((current) => (current === noteId ? null : current));
       };
     }
     void navigator.locks

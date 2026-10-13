@@ -60,7 +60,7 @@ export interface LocalOperation {
 }
 
 export interface LocalSyncMeta {
-  id: "state";
+  id: string;
   cursor: string | null;
   bootstrapToken: string | null;
   acceptedOperationIds: string[];

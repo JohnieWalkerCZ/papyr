@@ -213,11 +213,26 @@ test("new Markdown note and pending create survive offline reload", async ({ pag
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);
   await createNote(page, "Offline notes");
-  await page.getByRole("link", { name: "Papyr" }).click();
-  await expect(page).toHaveURL("http://localhost:3001/");
-  await expect(page.getByRole("link", { name: "Offline notes", exact: true })).toBeVisible();
+  const noteId = page.url().split("/").at(-1)!;
+  await expect
+    .poll(() =>
+      page.evaluate(async (id) => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("papyr-local");
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => resolve(request.result);
+        });
+        const transaction = database.transaction("entities", "readonly");
+        return await new Promise<string>((resolve) => {
+          const request = transaction.objectStore("entities").get(id);
+          request.onsuccess = () => resolve(String(request.result?.title ?? ""));
+        });
+      }, noteId),
+    )
+    .toBe("Offline notes");
   await page.reload();
-  await expect(page.getByRole("link", { name: "Offline notes", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/notes\//);
+  await expect(page.getByLabel("Note title")).toHaveValue("Offline notes");
   const counts = await page.evaluate(
     () =>
       new Promise<{ entities: number; outbox: number }>((resolve, reject) => {
