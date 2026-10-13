@@ -1,5 +1,16 @@
 # DECISIONS.md — architecture decision log
 
+### Deployment diagnostics — setup-status web route (2026-10-13)
+
+- Handle only the read-only setup-status request in a Next.js route before the general API rewrites, preserving the existing configured API origin and session cookie. Return safe transport error codes in the existing error envelope so an administrator without container-log access can distinguish refused connections, Docker DNS failures, timeouts, and reachable API errors.
+- Preserve upstream JSON diagnostics and prevent caching; bound the upstream request to 10 seconds. Do not expose internal URLs, credentials, raw exceptions, or new administrative data. Other API requests keep the existing rewrite path; there are no database or mutation changes.
+
+### Deployment correction — database password transport (2026-10-13)
+
+- Compose must pass `PAPYR_DB_PASSWORD` as the API's `PGPASSWORD`, rather than concatenate it into `ConnectionStrings__Papyr`. Npgsql's connection-string parser treats semicolons and quotes as syntax; a valid PostgreSQL password can otherwise prevent startup migrations and stop the API before it listens.
+- No schema or stored-password change. Existing volumes retain their original role password; rotation requires a coordinated administrator action. The environment remains private to the API/database containers.
+- Verification: Compose regression checks cover password punctuation; disposable PostgreSQL/API Docker startup checks exercise migrations and setup-status. This establishes a reproducible configuration fault, not confirmation of the inaccessible host's actual password or failure.
+
 ## Recorded decisions (proposed baseline, 2026-10-10)
 
 | ID | Decision | Reason | Consequence |

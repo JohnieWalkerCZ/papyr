@@ -1,5 +1,28 @@
 import { expect, test } from "@playwright/test";
 
+test("setup proxy failures are explained in Settings without API log access", async ({ page }) => {
+  await page.route("**/api/v1/auth/setup-status", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "API_CONNECTION_REFUSED",
+          message: "The API connection was refused. The API may have crashed during startup.",
+        },
+        diagnosticId: "proxy-reference",
+      }),
+    }),
+  );
+  await page.route("**/api/v1/auth/me", (route) => route.fulfill({ status: 401, body: "{}" }));
+  await page.goto("/");
+  await page.locator(".sidebar-settings").click();
+  const diagnostic = page.locator(".setup-diagnostic");
+  await expect(diagnostic).toContainText("HTTP 503 · API_CONNECTION_REFUSED");
+  await expect(diagnostic).toContainText("API may have crashed during startup");
+  await expect(diagnostic).toContainText("proxy-reference");
+});
+
 test("setup database errors are explained in Settings and can be retried", async ({ page }) => {
   let setupChecks = 0;
   await page.route("**/api/v1/auth/setup-status", async (route) => {

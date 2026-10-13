@@ -56,6 +56,20 @@ If the API exits during startup and Portainer does not retain its logs, temporar
 
 The web app is available on host port `6767` by default (container port `3000`). Set `PAPYR_WEB_PORT=6767` in Portainer if it has a previous value saved. This port listens on all host interfaces. The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all four values consistently.
 
+### Capture startup when Portainer removes failed containers
+
+Settings also reports safe web-to-API transport diagnostics for setup-status without container-log access. `API_CONNECTION_REFUSED` means the target refused the connection (API startup failure or incorrect internal port); `API_DNS_FAILED` means the API hostname could not be resolved; `API_TIMEOUT` means no response within 10 seconds; `API_HTTP_ERROR` means the API was reachable but returned a non-JSON error. Rebuild and redeploy the web image to enable these diagnostics; changing stack environment variables alone does not update application code. Existing API database diagnostic codes continue to pass through.
+
+If Portainer removes containers after a failed stack deployment, capture startup directly on the Docker host over SSH, or reproduce on a separate machine with Docker. From a checkout of the same commit and a private `.env` matching the stack settings, run:
+
+```sh
+bash infra/capture-startup.sh /absolute/private/path/papyr-startup.log
+```
+
+The script runs Compose in the foreground and captures build output, dependency failures, and streamed service logs before containers can disappear. The log is created with owner-only permissions and existing files are never overwritten. Ctrl+C stops the foreground services without deleting their volumes. On the deployed host, this can rebuild/recreate the stack's services, so use a maintenance window and preserve its existing Compose project name with `COMPOSE_PROJECT_NAME` (shown in the containers' `com.docker.compose.project` label). On another machine, use a fresh project and database; that verifies the image and migrations but cannot reproduce host-specific networking or existing database state. Keep logs private and redact credentials before sharing them.
+
+If the failure happens before any container starts, the saved Compose/build error is the relevant evidence; there are no container logs to retrieve. Docker-host access is required for this capture when Portainer itself does not retain the deployment output.
+
 ## Public HTTPS hosting
 
 Use a reverse proxy or load balancer that terminates TLS and forwards the same public hostname to the `web` service. The web app routes `/api/v1/` and `/hubs/` to the API, so clients should use one origin. Preserve those paths, allow WebSocket upgrades for `/hubs/`, and set request and proxy timeouts high enough for attachment uploads. Enable HTTPS before users sign in.
@@ -92,6 +106,10 @@ The supplied `infra/compose.yaml` reads these values from a local `.env` file in
 | `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | Build-time whiteboard license key | Optional; use only with a license valid for this deployment. |
 
 The Next.js API origin is set at image build time through `PAPYR_API_ORIGIN` (the supplied Compose build sets it to `http://api:8080`). For a custom deployment, preserve the internal API origin reachable by the web container. The public browser-facing API path remains same-origin through Next.js rewrites.
+
+Compose passes the API database password separately as `PGPASSWORD`, which Npgsql reads when the connection string omits `Password`. This preserves semicolons and quotes as password characters instead of parsing them as connection-string settings. Keep this environment value private, just like `POSTGRES_PASSWORD`.
+
+Changing `PAPYR_DB_PASSWORD` does **not** change the role password in an already initialized PostgreSQL volume. PostgreSQL can pass the supplied `pg_isready` healthcheck while rejecting the API's password; startup migrations then fail before the API listens. Preserve the existing password, or have the host administrator perform a coordinated database password rotation. Do not delete the database volume to resolve a credential mismatch. An empty setup token only disables first setup; it does not prevent API startup or the setup-status GET.
 
 ## Backups and restore
 

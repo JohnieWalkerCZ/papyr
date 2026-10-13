@@ -4,7 +4,7 @@ This is the current v1 wire contract. Base URL: same-origin `/api/v1`. HTTPS is 
 
 ## Authentication
 
-- `GET /api/v1/auth/setup-status` — reports whether initial setup has completed; on database errors returns `503` with a safe diagnostic code and request diagnostic ID, while full exceptions remain in API logs.
+- `GET /api/v1/auth/setup-status` — reports whether initial setup has completed; on database errors returns `503` with a safe diagnostic code and request diagnostic ID, while full exceptions remain in API logs. The Next.js route preserves API JSON responses and returns safe `503` transport diagnostics (`API_CONNECTION_REFUSED`, `API_DNS_FAILED`, `API_TIMEOUT`, `API_PROXY_FAILED`) when it cannot reach the API, or `API_HTTP_ERROR` for a non-JSON API error. Settings displays these diagnostics without exposing internal addresses or exception contents.
 - `POST /api/v1/setup` — one-time initial administrator bootstrap, authorized with setup token and `confirmReset: true`; transactionally clears server records and clears files under configured attachment storage before creating the administrator.
 - `POST /api/v1/auth/accounts` — administrator-only account provisioning; creates a non-admin account without signing it in.
 - `POST /api/v1/auth/login` — establish authenticated session.

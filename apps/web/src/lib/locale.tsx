@@ -40,6 +40,14 @@ export const messages = {
         "The API could not connect to PostgreSQL. Check that the database container is healthy.",
       setupCheckGenericError:
         "The API could not check setup status. Check the API container and database configuration.",
+      setupApiRefused:
+        "The web server's API connection was refused. The API may have crashed during startup or the web image may target the wrong API port.",
+      setupApiDns:
+        "The web server could not resolve the API hostname. Check the shared Docker network and the web image's API origin.",
+      setupApiTimeout:
+        "The API did not respond within 10 seconds. Check API startup, container networking, and database availability.",
+      setupApiHttpError:
+        "The API is reachable but returned an unexpected error. Check the deployed API image and database configuration.",
       retrySetupCheck: "Retry setup check",
       submit: "Working…",
       setupHelp:
@@ -322,6 +330,14 @@ export const messages = {
       setupDatabaseMissing: "Databáze Papyr nebyla nalezena. Zkontrolujte název databáze v nastavení API.",
       setupDatabaseUnavailable: "API se nemůže připojit k PostgreSQL. Zkontrolujte, zda je kontejner databáze zdravý.",
       setupCheckGenericError: "API nemůže ověřit stav nastavení. Zkontrolujte API kontejner a konfiguraci databáze.",
+      setupApiRefused:
+        "Spojení webového serveru s API bylo odmítnuto. API mohlo selhat při spuštění nebo webový obraz používá nesprávný port API.",
+      setupApiDns:
+        "Webový server nedokázal přeložit název hostitele API. Zkontrolujte společnou síť Dockeru a adresu API ve webovém obrazu.",
+      setupApiTimeout:
+        "API neodpovědělo do 10 sekund. Zkontrolujte spuštění API, síť kontejnerů a dostupnost databáze.",
+      setupApiHttpError:
+        "API je dostupné, ale vrátilo neočekávanou chybu. Zkontrolujte nasazený obraz API a konfiguraci databáze.",
       retrySetupCheck: "Zopakovat kontrolu",
       submit: "Pracuji…",
       setupHelp:

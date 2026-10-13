@@ -8,6 +8,17 @@ import { useLocale } from "@/lib/locale";
 
 export function AuthPanel() {
   const copy = useLocale().auth;
+  const setupDiagnostics: Record<string, string> = {
+    DATABASE_SCHEMA_ERROR: copy.setupDatabaseSchemaError,
+    DATABASE_AUTH_FAILED: copy.setupDatabaseAuthError,
+    DATABASE_NOT_FOUND: copy.setupDatabaseMissing,
+    DATABASE_UNAVAILABLE: copy.setupDatabaseUnavailable,
+    API_CONNECTION_REFUSED: copy.setupApiRefused,
+    API_DNS_FAILED: copy.setupApiDns,
+    API_TIMEOUT: copy.setupApiTimeout,
+    API_HTTP_ERROR: copy.setupApiHttpError,
+    API_PROXY_FAILED: copy.setupConnectionError,
+  };
   const [user, setUser] = useState<SessionUser | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -166,15 +177,7 @@ export function AuthPanel() {
               <p>
                 {setupStatusError.status === 0
                   ? copy.setupConnectionError
-                  : setupStatusError.code === "DATABASE_SCHEMA_ERROR"
-                    ? copy.setupDatabaseSchemaError
-                    : setupStatusError.code === "DATABASE_AUTH_FAILED"
-                      ? copy.setupDatabaseAuthError
-                      : setupStatusError.code === "DATABASE_NOT_FOUND"
-                        ? copy.setupDatabaseMissing
-                        : setupStatusError.code === "DATABASE_UNAVAILABLE"
-                          ? copy.setupDatabaseUnavailable
-                          : copy.setupCheckGenericError}
+                  : (setupDiagnostics[setupStatusError.code ?? ""] ?? copy.setupCheckGenericError)}
               </p>
               <button className="text-button" type="button" onClick={() => void refreshSetupStatus()}>
                 {copy.retrySetupCheck}

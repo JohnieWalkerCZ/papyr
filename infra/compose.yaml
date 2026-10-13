@@ -38,7 +38,8 @@ services:
         fi
         exec dotnet Papyr.Api.dll
     environment:
-      ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr;Password=${PAPYR_DB_PASSWORD:-papyr-dev-only}
+      ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr
+      PGPASSWORD: ${PAPYR_DB_PASSWORD:-papyr-dev-only}
       PAPYR_API_DIAGNOSTICS: ${PAPYR_API_DIAGNOSTICS:-false}
       PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
       PAPYR_COOKIE_SECURE: ${PAPYR_COOKIE_SECURE:-false}
