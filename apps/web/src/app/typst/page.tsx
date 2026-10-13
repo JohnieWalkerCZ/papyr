@@ -83,7 +83,7 @@ export default function TypstProof({
       ) as Record<"engine.core.wasm" | "engine.core2.wasm" | "engine.core3.wasm", WebAssembly.Module>;
       if (currentJob !== jobId.current) return;
       const compiler = await createTypstCompiler({
-        backend: "worker",
+        backend: "auto",
         worker: () => createWebWorker(`${base}web-worker.js`),
         coreModules,
         fetch: async () => {
