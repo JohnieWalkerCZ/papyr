@@ -17,7 +17,7 @@ services:
       NEXT_PUBLIC_TLDRAW_LICENSE_KEY: ${NEXT_PUBLIC_TLDRAW_LICENSE_KEY:-}
     depends_on:
       api:
-        condition: service_healthy
+        condition: ${PAPYR_API_START_CONDITION:-service_healthy}
 
   api:
     build:
