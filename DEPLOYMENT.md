@@ -52,6 +52,8 @@ Create a Stack from the Git repository and set the Compose path to `infra/compos
 
 Set `PAPYR_DB_PASSWORD` and `PAPYR_INITIAL_SETUP_TOKEN` to unique strong values before deployment. Set `PAPYR_COOKIE_SECURE=true` when the public site uses HTTPS. `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` is optional and is consumed during the web image build; after changing it, rebuild and redeploy the stack. Keep `PAPYR_MIGRATE_ON_STARTUP=true` for the supplied single-API stack. Keep the stack environment values private and restrict stack access to administrators.
 
+The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all four values consistently.
+
 ## Public HTTPS hosting
 
 Use a reverse proxy or load balancer that terminates TLS and forwards the same public hostname to the `web` service. The web app routes `/api/v1/` and `/hubs/` to the API, so clients should use one origin. Preserve those paths, allow WebSocket upgrades for `/hubs/`, and set request and proxy timeouts high enough for attachment uploads. Enable HTTPS before users sign in.
