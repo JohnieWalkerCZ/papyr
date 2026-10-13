@@ -1,3 +1,5 @@
+import { fetchWithDiagnostics, safeErrorDetails } from "./network-diagnostics";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -51,7 +53,7 @@ export interface ServerChange {
 }
 
 async function csrfToken() {
-  const response = await fetch("/api/v1/auth/csrf", { cache: "no-store", credentials: "same-origin" });
+  const response = await fetchWithDiagnostics("/api/v1/auth/csrf", { cache: "no-store", credentials: "same-origin" });
   if (!response.ok) throw await apiError(response);
   return ((await response.json()) as { token: string }).token;
 }
@@ -62,7 +64,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("X-CSRF-TOKEN", await csrfToken());
   }
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(`/api/v1${path}`, { ...init, headers, cache: "no-store", credentials: "same-origin" });
+  const response = await fetchWithDiagnostics(`/api/v1${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+    credentials: "same-origin",
+  });
   if (!response.ok) throw await apiError(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -84,7 +91,9 @@ async function apiError(response: Response) {
   } catch {
     // Keep the safe status message when the server did not return JSON.
   }
-  return new ApiError(message, response.status, code, diagnosticId);
+  const error = new ApiError(message, response.status, code, diagnosticId);
+  console.warn("[Papyr network] API error details", safeErrorDetails(error));
+  return error;
 }
 
 export const api = {
@@ -141,7 +150,7 @@ export const api = {
     });
     const body = new FormData();
     body.append("file", asset.blob, "attachment");
-    const response = await fetch("/api/v1/assets", {
+    const response = await fetchWithDiagnostics("/api/v1/assets", {
       method: "POST",
       headers,
       body,
@@ -158,7 +167,10 @@ export const api = {
     };
   },
   async downloadAsset(id: string) {
-    const response = await fetch(`/api/v1/assets/${id}`, { cache: "no-store", credentials: "same-origin" });
+    const response = await fetchWithDiagnostics(`/api/v1/assets/${id}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
     if (!response.ok) throw await apiError(response);
     const sha256 = response.headers.get("X-Content-SHA256");
     if (!sha256 || !/^[0-9a-f]{64}$/i.test(sha256))

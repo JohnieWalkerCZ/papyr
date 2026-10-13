@@ -2,6 +2,7 @@ import { createUuid } from "./uuid.js";
 import { ApiError, api, type ServerChange, type ServerEntity } from "@/lib/api-client";
 import { HubConnectionBuilder, HubConnectionState, type HubConnection } from "@microsoft/signalr";
 import { retryTransient } from "@/lib/sync-retry";
+import { safeErrorDetails } from "@/lib/network-diagnostics";
 import {
   localDb,
   repairRejectedUnsyncedOperation,
@@ -26,10 +27,12 @@ let hubRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let hubRetryAttempt = 0;
 
 function announce(state: SyncState, message: string) {
+  console.info("[Papyr sync] state changed", { state });
   window.dispatchEvent(new CustomEvent("papyr-sync-state", { detail: { state, message } }));
 }
 
 export function setSyncAuthenticated(value: boolean) {
+  console.info("[Papyr sync] authentication changed", { authenticated: value });
   authenticated = value;
   if (value) startChangeHub();
   else {
@@ -40,7 +43,11 @@ export function setSyncAuthenticated(value: boolean) {
 }
 
 export function scheduleSync(delay = 5000) {
-  if (!authenticated || typeof window === "undefined") return;
+  if (!authenticated || typeof window === "undefined") {
+    console.info("[Papyr sync] scheduling skipped", { authenticated, browser: typeof window !== "undefined" });
+    return;
+  }
+  console.debug("[Papyr sync] scheduled", { delayMs: delay });
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => void syncLocalLibrary(), delay);
 }
@@ -76,6 +83,7 @@ function startChangeHub() {
 }
 
 function handleHubClose(error?: Error) {
+  console.warn("[Papyr sync] change notification connection closed", safeErrorDetails(error));
   if (error && /(?:401|403|unauthorized|forbidden)/i.test(error.message)) {
     void syncLocalLibrary();
     return;
@@ -93,15 +101,33 @@ function scheduleHubRetry() {
 }
 
 export async function syncLocalLibrary(): Promise<SyncState> {
+  console.info("[Papyr sync] attempt requested", {
+    authenticated,
+    online: navigator.onLine,
+    alreadyRunning: Boolean(activeSync),
+  });
   if (!navigator.onLine) {
     announce("offline", "Offline · local edits remain saved here.");
     return "offline";
   }
-  if (!authenticated) return "authRequired";
-  if (activeSync) return activeSync;
-  activeSync = withSyncLock(runSync).finally(() => {
-    activeSync = undefined;
-  });
+  if (!authenticated) {
+    announce("authRequired", "Sign in to sync. Local changes remain saved.");
+    return "authRequired";
+  }
+  if (activeSync) {
+    console.info("[Papyr sync] joining existing attempt");
+    return activeSync;
+  }
+  activeSync = withSyncLock(runSync)
+    .catch((error) => {
+      console.error("[Papyr sync] coordination failed", safeErrorDetails(error));
+      announce("error", "Sync coordination failed. Local changes remain saved.");
+      return "error" as const;
+    })
+    .finally(() => {
+      console.info("[Papyr sync] attempt finished");
+      activeSync = undefined;
+    });
   return activeSync;
 }
 
@@ -109,7 +135,10 @@ async function runSync(): Promise<SyncState> {
   announce("syncing", "Syncing local changes…");
   try {
     await retryTransient(() => api.me());
+    console.info("[Papyr sync] outbox before sync", { pendingOperations: await localDb.outbox.count() });
+    console.info("[Papyr sync] pulling remote changes");
     await pullChanges();
+    console.info("[Papyr sync] uploading pending operations");
     const state = await pushOutbox();
     if (state === "conflict") {
       announce(state, "Some changes need conflict resolution.");
@@ -122,6 +151,7 @@ async function runSync(): Promise<SyncState> {
     announce("synced", "Synced to server.");
     return "synced";
   } catch (error) {
+    console.error("[Papyr sync] attempt failed", safeErrorDetails(error));
     if (error instanceof ApiError && error.status === 401) {
       setSyncAuthenticated(false);
       announce("authRequired", "Sign in to sync. Local changes remain saved.");
@@ -269,6 +299,15 @@ async function pushOutbox(): Promise<SyncState> {
     if (!current) continue;
     const { results } = await retryTransient(() => api.mutations([wireOperation(current)]));
     const result = results[0];
+    console.info("[Papyr sync] mutation receipt", {
+      operationId: operation.operationId,
+      entityId: operation.entityId,
+      action: operation.action,
+      baseRevision: current.baseRevision,
+      status: result.status,
+      revision: result.revision,
+      code: result.error?.code,
+    });
     if (result.status === "accepted" || result.status === "duplicate") {
       if (result.revision) await acknowledge(operation.operationId, operation.entityId, result.revision);
     } else if (result.status === "conflict") {
@@ -313,8 +352,18 @@ async function pushOutbox(): Promise<SyncState> {
       result.error?.code === "NOT_FOUND" &&
       (await repairRejectedUnsyncedOperation(operation.operationId))
     ) {
+      console.warn("[Papyr sync] repairing missing create before unsynced delete", {
+        entityId: operation.entityId,
+        operationId: operation.operationId,
+      });
       return pushOutbox();
     } else {
+      console.error("[Papyr sync] mutation blocked; operation remains queued", {
+        operationId: operation.operationId,
+        entityId: operation.entityId,
+        status: result.status,
+        code: result.error?.code,
+      });
       return "error";
     }
   }
@@ -440,15 +489,32 @@ function blankMeta(): LocalSyncMeta {
 }
 
 async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> {
-  if (navigator.locks) return navigator.locks.request("papyr-sync", { mode: "exclusive" }, work);
+  if (navigator.locks) {
+    console.info("[Papyr sync] waiting for browser lock");
+    return navigator.locks.request("papyr-sync", { mode: "exclusive" }, async () => {
+      console.info("[Papyr sync] browser lock acquired");
+      try {
+        return await work();
+      } finally {
+        console.info("[Papyr sync] browser lock released");
+      }
+    });
+  }
+  console.info("[Papyr sync] acquiring IndexedDB lock");
   const lockId = createUuid();
   const acquired = await localDb.transaction("rw", localDb.syncMeta, async () => {
     const state = (await localDb.syncMeta.get("state")) ?? blankMeta();
-    if (state.lockExpiresAt && state.lockExpiresAt > Date.now()) return false;
+    if (state.lockExpiresAt && state.lockExpiresAt > Date.now()) {
+      console.warn("[Papyr sync] deferred: another tab holds the IndexedDB lock", {
+        expiresAt: new Date(state.lockExpiresAt).toISOString(),
+      });
+      return false;
+    }
     await localDb.syncMeta.put({ ...state, lockOwner: lockId, lockExpiresAt: Date.now() + 300_000 });
     return true;
   });
   if (!acquired) return "idle";
+  console.info("[Papyr sync] IndexedDB lock acquired");
   const heartbeat = setInterval(() => {
     void localDb
       .transaction("rw", localDb.syncMeta, async () => {
@@ -457,7 +523,7 @@ async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> 
           await localDb.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 300_000 });
         }
       })
-      .catch(() => {});
+      .catch((error) => console.error("[Papyr sync] lock heartbeat failed", safeErrorDetails(error)));
   }, 30_000);
   try {
     return await work();
@@ -469,6 +535,7 @@ async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> 
       delete unlocked.lockOwner;
       delete unlocked.lockExpiresAt;
       await localDb.syncMeta.put(unlocked);
+      console.info("[Papyr sync] IndexedDB lock released");
     }
   }
 }

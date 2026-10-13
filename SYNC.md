@@ -63,6 +63,8 @@ Pull-before-push minimizes avoidable conflicts but does **not** eliminate races.
 
 ## 5. Remote cursor protocol
 
+Browser console diagnostics use `[Papyr network]` and `[Papyr sync]` prefixes. Log request IDs, method/path without query values, response status/timing, safe error name/code/reference, retry delays, authentication/online state, lock acquisition/defer/release, pending-operation counts, and mutation receipt metadata. Never log request/response bodies, headers, passwords, tokens, note titles/content, attachment bytes, or raw exception messages/stacks. A coordination failure reports an explicit sync error while retaining queued edits; a signed-out manual attempt reports authentication required.
+
 If a note delete is definitively rejected with `NOT_FOUND`, both its queued base revision and local revision are null, and no create is queued, repair the orphan outbox atomically: queue the preserved full note snapshot as a create, then the delete payload under a fresh operation ID. Keep the local Trash snapshot. Server acknowledgment of the create supplies the delete's base revision; the delete then produces an ordinary restorable tombstone. Acknowledged notes and missing folders are not recreated by this recovery. Permanent rejected receipts require fresh IDs for the repaired operations.
 
 - The server provides a per-account **opaque** cursor indicating an ordered committed prefix of its change log.

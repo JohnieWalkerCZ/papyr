@@ -1,5 +1,10 @@
 # DECISIONS.md — architecture decision log
 
+### Browser diagnostics — networking and sync stalls (2026-10-14)
+
+- User requested console diagnostics for a persistent pending-sync state. Instrument all API/CSRF/attachment fetches and sync coordination with request status/timing, error codes/references, retry and lock stages, authentication/online flags, pending-operation counts, and receipt metadata. Exclude body/header/query values and raw exceptions to protect private notes and credentials.
+- Preserve request and mutation behavior. Surface coordination exceptions as explicit sync error state rather than an unhandled rejected promise; announce authentication required for a signed-out manual sync attempt. No data/schema migration or server logging service is added.
+
 ### Sync recovery — orphan unsynced note deletion (2026-10-13)
 
 - The deployed server rejected a note `delete` with `NOT_FOUND` and `baseRevision: null`. For this narrow case, when the local note also has no acknowledged revision and no queued create, atomically preserve its full snapshot in a new create operation followed by the original delete payload under a fresh operation ID. Rejected server receipts remain permanent; do not retry a changed operation with the rejected ID.
