@@ -16,6 +16,29 @@ import {
   updateLocalNote,
 } from "../src/lib/local-db.ts";
 
+test("local notes and operations persist without crypto.randomUUID", async (t) => {
+  const name = `papyr-http-${crypto.randomUUID()}`;
+  Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+  t.after(() => delete crypto.randomUUID);
+  const db = createLocalDb(name);
+  try {
+    const folder = await createFolder("HTTP folder", null, db);
+    const note = await createNote("HTTP note", "markdown", db, folder.id);
+    await updateLocalNote(note.id, { content: "Saved over HTTP" }, db);
+    db.close();
+    await db.open();
+    assert.equal((await db.entities.get(note.id))?.content, "Saved over HTTP");
+    const operations = await db.outbox.toArray();
+    assert.equal(operations.length, 3);
+    for (const id of [folder.id, note.id, ...operations.map((operation) => operation.operationId)]) {
+      assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    }
+  } finally {
+    db.close();
+    await Dexie.delete(name);
+  }
+});
+
 test("schema upgrade preserves Phase 0 data and adds library stores", async () => {
   const name = `papyr-migration-${crypto.randomUUID()}`;
   const legacy = new Dexie(name);

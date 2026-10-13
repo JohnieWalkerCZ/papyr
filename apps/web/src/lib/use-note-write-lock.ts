@@ -1,5 +1,6 @@
 "use client";
 
+import { createUuid } from "./uuid.js";
 import { useEffect, useState } from "react";
 
 export function useNoteWriteLock(noteId: string) {
@@ -19,7 +20,7 @@ export function useNoteWriteLock(noteId: string) {
     }
     let profileId: string;
     try {
-      profileId = localStorage.getItem("papyr-profile-id") ?? crypto.randomUUID();
+      profileId = localStorage.getItem("papyr-profile-id") ?? createUuid();
       localStorage.setItem("papyr-profile-id", profileId);
     } catch {
       void Promise.resolve().then(() => active && setState("unsupported"));

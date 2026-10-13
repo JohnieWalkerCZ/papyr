@@ -1,3 +1,4 @@
+import { createUuid } from "./uuid.js";
 import Dexie, { type EntityTable } from "dexie";
 
 export interface LocalDraft {
@@ -139,7 +140,7 @@ export async function storeLocalAttachment(file: File, database = localDb): Prom
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
   const asset: LocalAsset = {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     blob: new Blob([bytes], { type: file.type }),
     sha256,
     mimeType: file.type,
@@ -170,7 +171,7 @@ export async function createNote(
 
   const now = Date.now();
   const note: LocalNote = {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     kind: "note",
     folderId,
     title: normalizedTitle,
@@ -199,7 +200,7 @@ export async function resolveLocalConflict(
     const saveCopy = async (local: LocalNote, queue: boolean) => {
       const copy = {
         ...local,
-        id: crypto.randomUUID(),
+        id: createUuid(),
         title: `${local.title}${copySuffix}`,
         revision: null,
         createdAt: Date.now(),
@@ -208,7 +209,7 @@ export async function resolveLocalConflict(
       await database.entities.add(copy);
       if (!queue) return;
       const operation: LocalOperation = {
-        operationId: crypto.randomUUID(),
+        operationId: createUuid(),
         entityType: "note",
         entityId: copy.id,
         action: "create",
@@ -233,7 +234,7 @@ export async function resolveLocalConflict(
       const local = localSnapshot;
       const remote = conflict.remote;
       const operation: LocalOperation = {
-        operationId: crypto.randomUUID(),
+        operationId: createUuid(),
         entityType: local.kind,
         entityId: local.id,
         action: local.kind === "note" ? "update" : "rename",
@@ -261,7 +262,7 @@ export async function createFolder(
     throw new Error("Parent folder not found.");
   const now = Date.now();
   const folder: LocalFolder = {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     kind: "folder",
     parentId,
     title: normalizedTitle,
@@ -295,7 +296,7 @@ async function queueInTransaction(
 ) {
   const last = await database.outbox.orderBy("createdAt").last();
   const operation: LocalOperation = {
-    operationId: crypto.randomUUID(),
+    operationId: createUuid(),
     entityType: entity.kind,
     entityId: entity.id,
     action,
@@ -415,7 +416,7 @@ export async function setDeletedLocalEntity(id: string, deleted: boolean, databa
       const next = { ...entity, deletedAt, updatedAt: deletedAt ?? Date.now() } as LocalEntity;
       await database.entities.put(next);
       await database.outbox.add({
-        operationId: crypto.randomUUID(),
+        operationId: createUuid(),
         entityType: entity.kind,
         entityId: entity.id,
         action: deleted ? "delete" : "restore",

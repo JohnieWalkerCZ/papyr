@@ -1,3 +1,4 @@
+import { createUuid } from "./uuid.js";
 import { ApiError, api, type ServerChange, type ServerEntity } from "@/lib/api-client";
 import { HubConnectionBuilder, HubConnectionState, type HubConnection } from "@microsoft/signalr";
 import { retryTransient } from "@/lib/sync-retry";
@@ -391,7 +392,7 @@ function blankMeta(): LocalSyncMeta {
 
 async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> {
   if (navigator.locks) return navigator.locks.request("papyr-sync", { mode: "exclusive" }, work);
-  const lockId = crypto.randomUUID();
+  const lockId = createUuid();
   const acquired = await localDb.transaction("rw", localDb.syncMeta, async () => {
     const state = (await localDb.syncMeta.get("state")) ?? blankMeta();
     if (state.lockExpiresAt && state.lockExpiresAt > Date.now()) return false;

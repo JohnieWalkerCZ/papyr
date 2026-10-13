@@ -66,7 +66,13 @@ test("PWA manifest provides install icons and standalone display", async ({ page
   for (const icon of manifest.icons) expect((await page.request.get(icon.src)).ok()).toBeTruthy();
 });
 
-test("local Markdown content survives reload and offline navigation", async ({ page, context }) => {
+test("local Markdown content survives reload and offline navigation without crypto.randomUUID", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() =>
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true }),
+  );
   await page.goto("/");
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
