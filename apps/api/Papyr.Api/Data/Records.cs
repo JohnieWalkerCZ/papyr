@@ -6,6 +6,7 @@ public sealed class OwnerRecord
     public string InstanceKey { get; set; } = "primary";
     public required string Username { get; set; }
     public required string PasswordHash { get; set; }
+    public bool IsAdmin { get; set; }
     public long LatestSequence { get; set; }
     public long MinRetainedSequence { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

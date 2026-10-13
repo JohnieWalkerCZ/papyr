@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, api, type SessionUser } from "@/lib/api-client";
+import { activateLocalAccount, resetLocalPapyrData } from "@/lib/local-db";
 import { setSyncAuthenticated, syncLocalLibrary } from "@/lib/sync";
 import { useLocale } from "@/lib/locale";
 
@@ -12,27 +13,42 @@ export function AuthPanel() {
   const [password, setPassword] = useState("");
   const [setupToken, setSetupToken] = useState("");
   const [setupMode, setSetupMode] = useState(false);
+  const [setupComplete, setSetupComplete] = useState(true);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [status, setStatus] = useState<string>(copy.checking);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const onSyncState = (event: Event) => {
-      const state = (event as CustomEvent<{ state: string }>).detail.state;
-      if (state === "authRequired") {
+      if ((event as CustomEvent<{ state: string }>).detail.state === "authRequired") {
         setUser(null);
+        setSyncAuthenticated(false);
+        void activateLocalAccount(null);
         setStatus(copy.loggedOut);
+        window.location.reload();
       }
     };
     window.addEventListener("papyr-sync-state", onSyncState);
     void api
+      .setupStatus()
+      .then(({ complete }) => {
+        setSetupComplete(complete);
+        setSetupMode(!complete);
+      })
+      .catch(() => {});
+    void api
       .me()
-      .then((session) => {
+      .then(async (session) => {
+        await activateLocalAccount(session.id, session.isAdmin);
         setUser(session);
         setSyncAuthenticated(true);
         setStatus(copy.loggedIn(session.username || session.id));
         void syncLocalLibrary();
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
+        await activateLocalAccount(null);
         setUser(null);
         const unauthorized = error instanceof ApiError && error.status === 401;
         setStatus(unauthorized ? copy.loggedOut : copy.unavailable);
@@ -44,15 +60,34 @@ export function AuthPanel() {
     event.preventDefault();
     setBusy(true);
     try {
-      const session = setupMode ? await api.setup(username, password, setupToken) : await api.login(username, password);
+      const session = setupMode
+        ? await api.setup(username, password, setupToken, confirmReset)
+        : await api.login(username, password);
+      if (setupMode) await resetLocalPapyrData();
+      await activateLocalAccount(session.id, !setupMode && session.isAdmin);
       setUser(session);
       setSyncAuthenticated(true);
       setPassword("");
       setSetupToken("");
       setStatus(copy.loggedIn(session.username || session.id));
-      void syncLocalLibrary();
+      window.location.reload();
     } catch (error) {
-      setStatus(setupMode ? (error instanceof ApiError ? error.message : copy.unavailable) : copy.loggedOut);
+      setStatus(error instanceof ApiError ? error.message : copy.unavailable);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAccount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.createAccount(newUsername, newPassword);
+      setNewUsername("");
+      setNewPassword("");
+      setStatus(copy.accountCreated);
+    } catch (error) {
+      setStatus(error instanceof ApiError ? error.message : copy.unavailable);
     } finally {
       setBusy(false);
     }
@@ -64,7 +99,8 @@ export function AuthPanel() {
       await api.logout();
       setUser(null);
       setSyncAuthenticated(false);
-      setStatus(copy.loggedOut);
+      await activateLocalAccount(null);
+      window.location.reload();
     } catch {
       setStatus(copy.unavailable);
     } finally {
@@ -79,9 +115,40 @@ export function AuthPanel() {
         <p aria-live="polite">{status}</p>
       </div>
       {user ? (
-        <button type="button" onClick={() => void logout()} disabled={busy}>
-          {copy.logout}
-        </button>
+        <>
+          <button type="button" onClick={() => void logout()} disabled={busy}>
+            {copy.logout}
+          </button>
+          {user.isAdmin && (
+            <form className="auth-form" onSubmit={(event) => void createAccount(event)}>
+              <h3>{copy.createAccount}</h3>
+              <label>
+                {copy.username}
+                <input
+                  autoComplete="username"
+                  required
+                  minLength={3}
+                  maxLength={64}
+                  value={newUsername}
+                  onChange={(event) => setNewUsername(event.target.value)}
+                />
+              </label>
+              <label>
+                {copy.password}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </label>
+              <button type="submit" disabled={busy}>
+                {busy ? copy.submit : copy.createAccount}
+              </button>
+            </form>
+          )}
+        </>
       ) : (
         <>
           <form className="auth-form" onSubmit={(event) => void submit(event)}>
@@ -102,30 +169,42 @@ export function AuthPanel() {
                 type="password"
                 autoComplete={setupMode ? "new-password" : "current-password"}
                 required
-                minLength={12}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
             </label>
             {setupMode && (
-              <label>
-                {copy.setupToken}
-                <input
-                  autoComplete="off"
-                  required
-                  minLength={32}
-                  value={setupToken}
-                  onChange={(event) => setSetupToken(event.target.value)}
-                />
-              </label>
+              <>
+                <label>
+                  {copy.setupToken}
+                  <input
+                    autoComplete="off"
+                    required
+                    minLength={32}
+                    value={setupToken}
+                    onChange={(event) => setSetupToken(event.target.value)}
+                  />
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={confirmReset}
+                    onChange={(event) => setConfirmReset(event.target.checked)}
+                  />
+                  {copy.confirmReset}
+                </label>
+              </>
             )}
-            <button type="submit" disabled={busy}>
+            <button type="submit" disabled={busy || (setupMode && setupComplete)}>
               {busy ? copy.submit : setupMode ? copy.setup : copy.login}
             </button>
           </form>
-          <button className="text-button" type="button" onClick={() => setSetupMode((mode) => !mode)}>
-            {copy.showSetup}
-          </button>
+          {!setupComplete && (
+            <button className="text-button" type="button" onClick={() => setSetupMode((mode) => !mode)}>
+              {copy.showSetup}
+            </button>
+          )}
           {setupMode && <p className="save-status">{copy.setupHelp}</p>}
         </>
       )}

@@ -6,7 +6,7 @@ Papyr is a **simple, fast, self-hosted, offline-first note workspace** combining
 
 ## 2. Primary user and use cases
 
-The initial target is a single owner who writes school/study notes, mathematical derivations, and sketches on desktop and tablet with stylus support. Multiple personal devices should see the same notes after sync. Design the ownership model for multiple accounts later, but do **not** build teams, public sharing, or real-time co-editing in MVP.
+The initial target is a person who writes school/study notes, mathematical derivations, and sketches on desktop and tablet with stylus support. A server supports multiple private accounts; an administrator provisions accounts. Each account's devices sync the same notes. Do **not** build teams, public sharing, or real-time co-editing in MVP.
 
 Core journeys:
 
@@ -55,6 +55,8 @@ Text editors must provide undo/redo, keyboard navigation, and autosave to Indexe
 - Docker Compose deployment for Next.js frontend, ASP.NET Core API, PostgreSQL, and durable attachment storage.
 - TLS via reverse proxy, secure authentication, and documented backups/restores.
 - Small-instance resource use suitable for a personal server; no mandatory external SaaS.
+- One-time first setup requires explicit confirmation and resets server records, attachment files, and local Papyr data in that browser; the first account is administrator.
+- Administrators create additional accounts; account data is isolated on the server and in account-specific browser storage.
 
 ## 4. MVP non-goals
 

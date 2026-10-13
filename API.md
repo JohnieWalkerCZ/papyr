@@ -4,13 +4,15 @@ This is the current v1 wire contract. Base URL: same-origin `/api/v1`. HTTPS is 
 
 ## Authentication
 
-- `POST /api/v1/setup` — one-time first-owner bootstrap, only when instance uninitialized and authorized with setup token.
+- `GET /api/v1/auth/setup-status` — reports whether initial setup has completed.
+- `POST /api/v1/setup` — one-time initial administrator bootstrap, authorized with setup token and `confirmReset: true`; transactionally clears server records and clears files under configured attachment storage before creating the administrator.
+- `POST /api/v1/auth/accounts` — administrator-only account provisioning; creates a non-admin account without signing it in.
 - `POST /api/v1/auth/login` — establish authenticated session.
 - `POST /api/v1/auth/logout` — revoke session (local dirty data retained until user explicitly handles it).
 - `GET /api/v1/auth/me` — account identity, capabilities, session status.
 - `GET /api/v1/auth/csrf` — optional CSRF token retrieval, depending on chosen CSRF architecture.
 
-No public sign-up in MVP. Setup and login are rate-limited. Setup is disabled unless a 32-character-or-longer `PAPYR_INITIAL_SETUP_TOKEN` is configured and an owner does not already exist. Session cookies expire after 14 days; logout revokes the current session and disconnects its active SignalR connections.
+There is no public sign-up. First setup requires a configured 32-character-or-longer `PAPYR_INITIAL_SETUP_TOKEN` and explicit reset confirmation. It is disabled after the first account exists. Each account can access only its own notes and attachments; the initial account is the sole administrator. Existing single-owner installations migrate that account as administrator. Setup and login are rate-limited. Session cookies expire after 14 days; logout revokes the current session and disconnects its active SignalR connections.
 
 ## Reading and change feed
 

@@ -31,16 +31,17 @@ public sealed class SessionAuthenticationHandler(
             item => item.TokenHash == hash && item.ExpiresAt > DateTimeOffset.UtcNow,
             Context.RequestAborted);
         if (session is null) return AuthenticateResult.Fail("Session is invalid or expired.");
-        var username = await db.Owners.AsNoTracking()
+        var owner = await db.Owners.AsNoTracking()
             .Where(owner => owner.Id == session.OwnerId)
-            .Select(owner => owner.Username)
+            .Select(owner => new { owner.Username, owner.IsAdmin })
             .SingleOrDefaultAsync(Context.RequestAborted);
-        if (username is null) return AuthenticateResult.Fail("Session owner no longer exists.");
+        if (owner is null) return AuthenticateResult.Fail("Session owner no longer exists.");
 
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, session.OwnerId.ToString()),
-            new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Name, owner.Username),
+            new Claim("papyr:is_admin", owner.IsAdmin.ToString().ToLowerInvariant()),
             new Claim(SessionHashClaim, session.TokenHash),
             new Claim(SessionExpiresAtClaim, session.ExpiresAt.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };

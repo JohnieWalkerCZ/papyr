@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -41,10 +42,32 @@ public sealed class AuthEndpointsTests
             });
             using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
 
+            Directory.CreateDirectory(Path.Combine(storagePath, "stale-owner"));
+            await File.WriteAllTextAsync(Path.Combine(storagePath, "stale-owner", "old.blob"), "old data");
+            await using (var seedScope = factory.Services.CreateAsyncScope())
+            {
+                var db = seedScope.ServiceProvider.GetRequiredService<Papyr.Api.Data.PapyrDbContext>();
+                db.Entities.Add(new Papyr.Api.Data.EntityRecord
+                {
+                    Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Kind = "note", Title = "Stale", Revision = 1,
+                    CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+                });
+                await db.SaveChangesAsync();
+            }
+
             var csrf = await GetCsrf(client);
-            using var setup = await Post(client, "/api/v1/setup", new { username = "owner", password = "correct horse battery staple" }, csrf,
+            using var unconfirmedSetup = await Post(client, "/api/v1/setup", new { username = "owner", password = "correct horse battery staple", confirmReset = false }, csrf,
+                ("X-Papyr-Setup-Token", "integration-test-bootstrap-secret-at-least-32-chars"));
+            Assert.Equal(HttpStatusCode.BadRequest, unconfirmedSetup.StatusCode);
+            await using (var preservedScope = factory.Services.CreateAsyncScope())
+            {
+                var db = preservedScope.ServiceProvider.GetRequiredService<Papyr.Api.Data.PapyrDbContext>();
+                Assert.Equal(1, await db.Entities.CountAsync());
+            }
+            using var setup = await Post(client, "/api/v1/setup", new { username = "owner", password = "correct horse battery staple", confirmReset = true }, csrf,
                 ("X-Papyr-Setup-Token", "integration-test-bootstrap-secret-at-least-32-chars"));
             Assert.Equal(HttpStatusCode.Created, setup.StatusCode);
+            Assert.False(Directory.Exists(Path.Combine(storagePath, "stale-owner")));
             var identity = await setup.Content.ReadFromJsonAsync<IdentityResponse>();
             Assert.NotNull(identity?.Id);
             csrf = await GetCsrf(client);
@@ -256,7 +279,22 @@ public sealed class AuthEndpointsTests
             using var retained = JsonDocument.Parse(await retainedChanges.Content.ReadAsStringAsync());
             Assert.Single(retained.RootElement.GetProperty("changes").EnumerateArray());
 
-            using var duplicateSetup = await Post(client, "/api/v1/setup", new { username = "another", password = "correct horse battery staple" }, csrf,
+            using var createdAccount = await Post(client, "/api/v1/auth/accounts", new { username = "second-user", password = "another password" }, csrf);
+            Assert.Equal(HttpStatusCode.Created, createdAccount.StatusCode);
+            using var secondClient = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
+            var accountCsrf = await GetCsrf(secondClient);
+            using var accountLogin = await Post(secondClient, "/api/v1/auth/login", new { username = "second-user", password = "another password" }, accountCsrf);
+            Assert.Equal(HttpStatusCode.OK, accountLogin.StatusCode);
+            accountCsrf = await GetCsrf(secondClient);
+            using var forbiddenAccount = await Post(secondClient, "/api/v1/auth/accounts", new { username = "third-user", password = "another password" }, accountCsrf);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenAccount.StatusCode);
+            using var secondBootstrap = await secondClient.GetAsync("/api/v1/bootstrap");
+            secondBootstrap.EnsureSuccessStatusCode();
+            using var secondLibrary = JsonDocument.Parse(await secondBootstrap.Content.ReadAsStringAsync());
+            Assert.Empty(secondLibrary.RootElement.GetProperty("folders").EnumerateArray());
+            Assert.Empty(secondLibrary.RootElement.GetProperty("notes").EnumerateArray());
+
+            using var duplicateSetup = await Post(client, "/api/v1/setup", new { username = "another", password = "correct horse battery staple", confirmReset = true }, csrf,
                 ("X-Papyr-Setup-Token", "integration-test-bootstrap-secret-at-least-32-chars"));
             Assert.Equal(HttpStatusCode.Conflict, duplicateSetup.StatusCode);
         }
@@ -302,7 +340,7 @@ public sealed class AuthEndpointsTests
     }
 
     private sealed record CsrfResponse(string? Token);
-    private sealed record IdentityResponse(Guid? Id, string? Username);
+    private sealed record IdentityResponse(Guid? Id, string? Username, bool IsAdmin);
     private sealed record NoteResponse(JsonElement? Content);
 
     private static string FirstMutationStatus(string json)

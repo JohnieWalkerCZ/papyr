@@ -11,8 +11,8 @@ Open the web address provided by the person hosting your Papyr server. The libra
 ### First use
 
 1. Ask the instance administrator whether this is a new instance and, if so, obtain its one-time setup token.
-2. In the **Server account** panel, choose **First setup**, enter a username, a password of at least 12 characters, and the setup token. This creates the instance's single owner account; setup can only succeed once.
-3. On other devices, sign in with that username and password. Each browser keeps its own local copy and synchronizes with the server after sign-in.
+2. In the **Server account** panel, choose **First setup**, enter a username, a non-empty password, and the setup token, then confirm the permanent reset. First setup clears all server data and local Papyr data in that browser before creating the first administrator. It can only succeed once.
+3. The administrator creates additional accounts in the **Server account** panel. There is no public registration. Sign in on each device; each account has a separate local library and server notes.
 
 If no server is configured or reachable, continue using Papyr locally. Those notes stay in that browser's storage and will not appear on other devices until the browser signs in and syncs with the intended server.
 
@@ -48,14 +48,14 @@ pnpm install --frozen-lockfile
 ./infra/dev.sh
 ```
 
-The development script generates a one-time owner setup token if needed, saves it in the local `.env`, and prints it in the terminal. Keep it private. Press Ctrl+C to stop the web server; stop the containers with `docker compose -f infra/compose.yaml down`.
+The development script generates a new one-time owner setup token every time it starts, saves it in the local `.env`, and prints it in the terminal. Keep it private. Press Ctrl+C to stop the web server; stop the containers with `docker compose -f infra/compose.yaml down`.
 
 For self-hosted deployment, HTTPS, storage, and backup instructions, see [DEPLOYMENT.md](DEPLOYMENT.md). The app's sync contract and current implementation detail are in [API.md](API.md) and [SYNC.md](SYNC.md).
 
 ## Current limitations
 
 - This is an in-progress MVP; do not treat it as a sole archival copy. Keep independent backups of important work.
-- The product is designed for one owner per instance. There is no public registration, sharing, or real-time collaborative editing.
+- The administrator provisions accounts. Notes and attachments are private to each account; there is no public registration, sharing, or real-time collaborative editing.
 - Typst has no arbitrary package fetching. Markdown preview does not support every Markdown construct.
 - Whiteboards are a proof of concept and production is blocked unless an applicable tldraw license key is supplied at build time.
 - Attachment orphan cleanup and a clean-host backup/restore rehearsal are still outstanding.

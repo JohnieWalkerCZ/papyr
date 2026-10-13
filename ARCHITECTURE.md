@@ -90,4 +90,4 @@ Service worker provides static shell/build assets and a safe navigation fallback
 
 ## Production assumptions
 
-One initial owner, moderate personal dataset, same-origin HTTPS, no public registrations, no real-time collaborative editing. Design with account IDs and database constraints so more users can be added without rewriting all data tables.
+One initial administrator, moderate personal dataset, same-origin HTTPS, administrator-provisioned accounts, and no real-time collaborative editing. Every server row and browser library is account-scoped.

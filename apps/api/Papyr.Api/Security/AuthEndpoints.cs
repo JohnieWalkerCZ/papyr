@@ -10,8 +10,9 @@ using Papyr.Api.Data;
 
 namespace Papyr.Api.Security;
 
-public sealed record SetupRequest(string Username, string Password);
+public sealed record SetupRequest(string Username, string Password, bool ConfirmReset = false);
 public sealed record LoginRequest(string Username, string Password);
+public sealed record CreateAccountRequest(string Username, string Password);
 
 public static class AuthEndpoints
 {
@@ -25,8 +26,11 @@ public static class AuthEndpoints
         }).AllowAnonymous();
 
         app.MapPost("/api/v1/setup", SetupAsync).AllowAnonymous().RequireRateLimiting("auth");
+        auth.MapGet("/setup-status", async (PapyrDbContext db, CancellationToken cancellationToken) =>
+            Results.Ok(new { complete = await db.Owners.AnyAsync(cancellationToken) }));
         auth.MapPost("/login", LoginAsync).AllowAnonymous().RequireRateLimiting("auth");
-        auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { id = user.FindFirstValue(ClaimTypes.NameIdentifier), username = user.Identity?.Name }))
+        auth.MapPost("/accounts", CreateAccountAsync).RequireAuthorization(policy => policy.RequireClaim("papyr:is_admin", "true")).RequireRateLimiting("auth");
+        auth.MapGet("/me", (ClaimsPrincipal user) => Results.Ok(new { id = user.FindFirstValue(ClaimTypes.NameIdentifier), username = user.Identity?.Name, isAdmin = user.HasClaim("papyr:is_admin", "true") }))
             .RequireAuthorization();
         auth.MapPost("/logout", LogoutAsync).RequireAuthorization();
     }
@@ -47,14 +51,29 @@ public static class AuthEndpoints
             return Results.Problem("Owner setup is not configured.", statusCode: StatusCodes.Status503ServiceUnavailable);
         if (!SessionTokens.SecretMatches(setupToken, context.Request.Headers["X-Papyr-Setup-Token"].FirstOrDefault()))
             return Results.Unauthorized();
-        if (await db.Owners.AnyAsync(cancellationToken)) return Results.Conflict(Error("SETUP_COMPLETE", "Owner setup has already completed."));
-        if (!ValidCredentials(request.Username, request.Password)) return Results.UnprocessableEntity(Error("INVALID_CREDENTIALS", "Use a username of 3–64 characters and a password of at least 12 characters."));
+        if (!request.ConfirmReset) return Results.BadRequest(Error("RESET_CONFIRMATION_REQUIRED", "Confirm the initial database and app reset."));
+        if (!ValidCredentials(request.Username, request.Password)) return Results.UnprocessableEntity(Error("INVALID_CREDENTIALS", "Use a username of 3–64 characters and a non-empty password."));
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(71020261013)", cancellationToken);
+        if (await db.Owners.AnyAsync(cancellationToken)) return Results.Conflict(Error("SETUP_COMPLETE", "Initial setup has already completed."));
+        ClearAssetFiles(configuration);
+        await db.AttachmentReferences.ExecuteDeleteAsync(cancellationToken);
+        await db.BootstrapCursors.ExecuteDeleteAsync(cancellationToken);
+        await db.BootstrapSnapshots.ExecuteDeleteAsync(cancellationToken);
+        await db.Changes.ExecuteDeleteAsync(cancellationToken);
+        await db.Receipts.ExecuteDeleteAsync(cancellationToken);
+        await db.Entities.ExecuteDeleteAsync(cancellationToken);
+        await db.Attachments.ExecuteDeleteAsync(cancellationToken);
+        await db.Sessions.ExecuteDeleteAsync(cancellationToken);
+        await db.Owners.ExecuteDeleteAsync(cancellationToken);
+        db.ChangeTracker.Clear();
         var owner = new OwnerRecord
         {
             Id = Guid.NewGuid(),
             Username = request.Username.Trim().ToLowerInvariant(),
             PasswordHash = string.Empty,
+            IsAdmin = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         owner.PasswordHash = hasher.HashPassword(owner, request.Password);
@@ -66,7 +85,36 @@ public static class AuthEndpoints
             return Results.Conflict(Error("SETUP_COMPLETE", "Owner setup has already completed."));
         }
         await IssueSession(context, db, owner.Id, configuration, cancellationToken);
-        return Results.Created("/api/v1/auth/me", new { id = owner.Id, username = owner.Username });
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Created("/api/v1/auth/me", new { id = owner.Id, username = owner.Username, isAdmin = true });
+    }
+
+    private static async Task<IResult> CreateAccountAsync(
+        CreateAccountRequest request,
+        HttpContext context,
+        IAntiforgery antiforgery,
+        PapyrDbContext db,
+        IPasswordHasher<OwnerRecord> hasher,
+        CancellationToken cancellationToken)
+    {
+        if (!await antiforgery.IsRequestValidAsync(context)) return Results.BadRequest(Error("CSRF_INVALID", "Request verification failed."));
+        if (!ValidCredentials(request.Username, request.Password)) return Results.UnprocessableEntity(Error("INVALID_CREDENTIALS", "Use a username of 3–64 characters and a non-empty password."));
+        var owner = new OwnerRecord
+        {
+            Id = Guid.NewGuid(),
+            InstanceKey = Guid.NewGuid().ToString("N")[..16],
+            Username = request.Username.Trim().ToLowerInvariant(),
+            PasswordHash = string.Empty,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        owner.PasswordHash = hasher.HashPassword(owner, request.Password);
+        db.Owners.Add(owner);
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Results.Conflict(Error("USERNAME_EXISTS", "That username is already in use."));
+        }
+        return Results.Created("/api/v1/auth/me", new { id = owner.Id, username = owner.Username, isAdmin = false });
     }
 
     private static async Task<IResult> LoginAsync(
@@ -90,7 +138,7 @@ public static class AuthEndpoints
         if (hasher.VerifyHashedPassword(owner, owner.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
             return Results.Unauthorized();
         await IssueSession(context, db, owner.Id, configuration, cancellationToken);
-        return Results.Ok(new { id = owner.Id, username = owner.Username });
+        return Results.Ok(new { id = owner.Id, username = owner.Username, isAdmin = owner.IsAdmin });
     }
 
     private static async Task<IResult> LogoutAsync(
@@ -146,7 +194,19 @@ public static class AuthEndpoints
     }
 
     private static bool ValidCredentials(string? username, string? password) =>
-        !string.IsNullOrWhiteSpace(username) && username.Trim().Length is >= 3 and <= 64 && username.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or '@') && !string.IsNullOrEmpty(password) && password.Length >= 12;
+        !string.IsNullOrWhiteSpace(username) && username.Trim().Length is >= 3 and <= 64 && username.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or '@') && !string.IsNullOrEmpty(password);
 
     private static object Error(string code, string message) => new { error = new { code, message } };
+
+    private static void ClearAssetFiles(IConfiguration configuration)
+    {
+        var root = Path.GetFullPath(configuration["PAPYR_ASSET_STORAGE_PATH"] ?? Path.Combine(AppContext.BaseDirectory, "assets"));
+        if (Path.GetPathRoot(root) == root) throw new InvalidOperationException("Attachment storage cannot be a filesystem root.");
+        if (!Directory.Exists(root)) return;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(root))
+        {
+            if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+            else File.Delete(entry);
+        }
+    }
 }

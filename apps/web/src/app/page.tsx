@@ -144,6 +144,8 @@ export default function Home() {
       }
     };
     window.addEventListener("papyr-sync-state", onSyncState);
+    const onAccountChange = () => void refresh();
+    window.addEventListener("papyr-account-change", onAccountChange);
     window.addEventListener("keydown", onShortcut);
     queueMicrotask(() => {
       void refresh()
@@ -155,6 +157,7 @@ export default function Home() {
     });
     return () => {
       window.removeEventListener("papyr-sync-state", onSyncState);
+      window.removeEventListener("papyr-account-change", onAccountChange);
       window.removeEventListener("keydown", onShortcut);
     };
   }, [copy]);

@@ -30,7 +30,10 @@ export const messages = {
       unavailable: "Server unavailable · local notes remain available",
       submit: "Working…",
       setupHelp:
-        "The setup token is provided by the instance operator. Owner setup works once; this does not enable public registration.",
+        "The setup token is provided by the instance operator. First setup permanently resets server data and this app's local data, then creates the first administrator.",
+      confirmReset: "I understand this permanently resets the database and local app data.",
+      createAccount: "Create account",
+      accountCreated: "Account created. Share its username and password securely.",
     },
     library: {
       heading: "Your library",
@@ -298,7 +301,10 @@ export const messages = {
       unavailable: "Server není dostupný · místní poznámky zůstávají dostupné",
       submit: "Pracuji…",
       setupHelp:
-        "Instalační token poskytuje správce instance. Nastavení vlastníka lze provést jednou; veřejná registrace není povolena.",
+        "Instalační token poskytuje správce instance. První nastavení trvale smaže data serveru i místní data aplikace a vytvoří prvního správce.",
+      confirmReset: "Rozumím, že se tím trvale smažou data databáze a místní aplikace.",
+      createAccount: "Vytvořit účet",
+      accountCreated: "Účet byl vytvořen. Předejte jeho jméno a heslo bezpečným způsobem.",
     },
     library: {
       heading: "Vaše knihovna",

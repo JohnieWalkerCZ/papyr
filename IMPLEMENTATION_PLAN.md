@@ -29,6 +29,7 @@ Follow these phases in order. Build one vertical slice at a time and complete it
 ## Phase 2 — auth, database, sync and multi-device
 
 - [x] Owner initialization, secure session auth, authorization tests, CSRF.
+- [ ] First setup reset confirmation, administrator-provisioned accounts, and account-isolated browser storage. (Implemented; API, IndexedDB, and browser-flow coverage added.)
 - [x] Server entities, attachment metadata, operation receipts, change log, cursor integrity. (Entities/receipts/change log/attachment metadata and safe contiguous-prefix retention with explicit 410 expired cursors are implemented; PostgreSQL integration coverage passes.)
 - [x] Implement API bootstrap/changes/mutations with optimistic concurrency and idempotency.
 - [ ] Implement frontend pull/apply/outbox/retry/backoff and content generation ACK logic. (Pull/apply/outbox, ACK, bounded transient retries, and one safe bootstrap-cursor rebase are implemented; pending-edit expiration E2E coverage is still missing.)

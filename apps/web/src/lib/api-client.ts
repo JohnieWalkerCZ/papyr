@@ -11,6 +11,7 @@ export class ApiError extends Error {
 export interface SessionUser {
   id: string;
   username?: string;
+  isAdmin: boolean;
 }
 
 export interface MutationReceipt {
@@ -80,18 +81,24 @@ async function apiError(response: Response) {
 }
 
 export const api = {
+  setupStatus() {
+    return request<{ complete: boolean }>("/auth/setup-status");
+  },
   async me() {
     return request<SessionUser>("/auth/me");
   },
   login(username: string, password: string) {
     return request<SessionUser>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
   },
-  setup(username: string, password: string, setupToken: string) {
+  setup(username: string, password: string, setupToken: string, confirmReset: boolean) {
     return request<SessionUser>("/setup", {
       method: "POST",
       headers: { "X-Papyr-Setup-Token": setupToken },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, confirmReset }),
     });
+  },
+  createAccount(username: string, password: string) {
+    return request<SessionUser>("/auth/accounts", { method: "POST", body: JSON.stringify({ username, password }) });
   },
   logout() {
     return request<void>("/auth/logout", { method: "POST", body: "{}" });

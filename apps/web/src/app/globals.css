@@ -251,6 +251,21 @@ button:disabled {
   width: min(14rem, 70vw);
   margin: 0.35rem 0 0;
 }
+.auth-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 20rem;
+}
+.auth-form .checkbox-label input {
+  width: auto;
+  margin: 0;
+}
+.auth-form h3 {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 1rem;
+}
 .auth-panel > button,
 .auth-form > button {
   align-self: end;

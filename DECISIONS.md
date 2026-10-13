@@ -9,7 +9,7 @@
 | ADR-003 | Next.js App Router + React + TypeScript PWA | One installable cross-platform client | Careful client-only initialization of IndexedDB/editors |
 | ADR-004 | Docker Compose deployment | Straightforward personal-server operation | Separate persistent DB and asset volumes |
 | ADR-005 | Every entity has a stable ID and revision | Moves/renames must be safe | All writes use optimistic concurrency |
-| ADR-006 | Single-user-first, account-scoped data model | Keep MVP manageable without blocking future accounts | Registration/sharing out of scope |
+| ADR-006 | Account-scoped data model with administrator provisioning | Keep each private library isolated without public registration | No sharing or team roles |
 | ADR-007 | SignalR is notification-only | Remote changes can be discovered promptly | REST/outbox protocol remains source of truth |
 | ADR-008 | tldraw stores document snapshots + separate asset blobs | Preserve editability and permit backup | SDK schema migration and asset lifecycle matter |
 | ADR-009 | Manual conflict resolution, no last-write-wins | Never silently lose user work | Conflict UI and copy resolution required |
@@ -57,7 +57,7 @@ These are design defaults. The original product constraints (three formats, Dock
 - Consequences and migrations: IndexedDB version 3 preserves all prior stores and records. The sync client must honor operation order, reconcile revisions after each acknowledgment, and preserve all operations on failed replay.
 - Validation/tests: Fake IndexedDB tests cover ordered replay records, folder-cycle rejection, descendant trash/restore, and atomic operation writes.
 
-### ADR-018 — First-owner authentication and session storage
+### ADR-018 — First-owner authentication and session storage (superseded by ADR-022)
 - Date: 2026-10-11
 - Status: accepted
 - Context: Phase 2 requires gated first-owner setup, revocable sessions, CSRF protection, and no public registration.
@@ -83,6 +83,21 @@ These are design defaults. The original product constraints (three formats, Dock
 - Alternatives considered: Local-only deletion (rejected because bootstrap would restore items); immediate server calls (rejected because offline use and lost acknowledgments would be unsafe); recursive server cascade purge (rejected because each stable entity needs its own feed event and revision check).
 - Consequences and migrations: No schema migration. The public mutation contract adds `purge`. Other profiles delete clean purged entities; profiles with local pending work retain a conflict until the user resolves it.
 - Validation/tests: Automated tests and cross-device browser coverage should include successful trash purge, acknowledged retries, conflict preservation on a second profile, and folder descendant ordering.
+
+### ADR-021 — Password length validation
+- Date: 2026-10-13
+- Status: accepted
+- Context: The account owner requested passwords with any character count.
+- Decision: Require a non-empty password but impose no application-level minimum or maximum length during setup or login.
+- Consequences: Password validation must remain consistent between the auth form and API; transport/runtime request-size limits still apply.
+
+### ADR-022 — First setup reset and administrator-provisioned accounts
+- Date: 2026-10-13
+- Status: accepted
+- Context: The account owner requested first setup to reset the app, support multiple private accounts, and allow the administrator to provision accounts.
+- Decision: A setup-token-authorized first setup requires explicit reset confirmation, clears all server data records and attachment files, and creates the first administrator. Setup is unavailable after that. Administrators create non-admin accounts; public registration is disabled. Migrate existing single-owner installations with their current owner as administrator. Keep browser IndexedDB separate per account and anonymous when signed out; migrate the legacy browser database to the existing administrator without deleting its source.
+- Consequences and migrations: Add `owners.is_admin` with a unique partial index allowing at most one administrator; existing accounts become administrators. No note data migration is needed because existing server records are already account-scoped. First setup is destructive only while no account exists and requires both the setup token and user confirmation. Rolling back removes admin roles and account provisioning, while leaving account-scoped note data intact.
+- Validation/tests: PostgreSQL-backed API tests cover account provisioning and isolation; IndexedDB tests cover account separation and preservation during legacy account migration; browser E2E covers setup, logout, account switch, and re-login.
 
 ## Deliberate future ADR candidates
 

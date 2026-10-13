@@ -4,6 +4,7 @@ import test from "node:test";
 import Dexie from "dexie";
 import {
   createLocalDb,
+  activateLocalAccount,
   createFolder,
   createMarkdownNote,
   createNote,
@@ -15,6 +16,39 @@ import {
   storeLocalAttachment,
   updateLocalNote,
 } from "../src/lib/local-db.ts";
+
+test("each signed-in account reopens only its own local library", async () => {
+  const id = crypto.randomUUID();
+  await activateLocalAccount(id);
+  const accountDb = (await import("../src/lib/local-db.ts")).localDb;
+  const note = await createMarkdownNote("Private note");
+  await activateLocalAccount(null);
+  assert.deepEqual(await listLocalNotes(), []);
+  await activateLocalAccount(id);
+  assert.equal((await listLocalNotes())[0]?.id, note.id);
+  await activateLocalAccount(null);
+  accountDb.close();
+  await Dexie.delete(`papyr-account-${id}`);
+});
+
+test("legacy local notes migrate to the existing administrator without deleting the source", async () => {
+  const id = crypto.randomUUID();
+  const storage = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+  });
+  const legacy = createLocalDb("papyr-local");
+  const note = await createMarkdownNote("Legacy note", legacy);
+  legacy.close();
+  await activateLocalAccount(id, true);
+  assert.equal((await listLocalNotes())[0]?.id, note.id);
+  assert.ok((await Dexie.getDatabaseNames()).includes("papyr-local"));
+  await activateLocalAccount(null);
+  (await import("../src/lib/local-db.ts")).localDb.close();
+  await Dexie.delete(`papyr-account-${id}`);
+  await Dexie.delete("papyr-local");
+});
 
 test("local notes and operations persist without crypto.randomUUID", async (t) => {
   const name = `papyr-http-${crypto.randomUUID()}`;

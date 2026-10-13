@@ -20,6 +20,7 @@ test("two browser profiles receive live sync hints and preserve divergent edits 
     await firstPage.getByLabel("Username").fill("sync-owner");
     await firstPage.getByLabel("Password").fill("correct horse battery staple");
     await firstPage.getByLabel("One-time setup token").fill(setupToken!);
+    await firstPage.getByLabel(/I understand this permanently resets/).check();
     await firstPage.getByRole("button", { name: "Initialize owner" }).click();
     await expect(firstPage.getByText("Signed in as sync-owner")).toBeVisible({ timeout: 15_000 });
     await firstPage.getByRole("button", { name: "Close" }).click();
@@ -58,8 +59,12 @@ test("two browser profiles receive live sync hints and preserve divergent edits 
     await expect
       .poll(() =>
         firstPage.evaluate(async (id) => {
+          const databaseName = (await indexedDB.databases()).find((database) =>
+            database.name?.startsWith("papyr-account-"),
+          )?.name;
+          if (!databaseName) throw new Error("Account database was not created");
           const database = await new Promise<IDBDatabase>((resolve, reject) => {
-            const request = indexedDB.open("papyr-local");
+            const request = indexedDB.open(databaseName);
             request.onerror = () => reject(request.error);
             request.onsuccess = () => resolve(request.result);
           });
@@ -112,6 +117,30 @@ test("two browser profiles receive live sync hints and preserve divergent edits 
     await firstPage.getByRole("button", { name: "Sync now" }).click();
     await expect(firstPage.getByRole("heading", { name: "Conflicts" })).toBeVisible({ timeout: 15_000 });
     await expect(firstPage.getByText("Local and server versions both have changes.")).toBeVisible();
+    await firstPage.locator(".conflict-dialog").getByRole("button", { name: "Close" }).click();
+
+    await firstPage.getByRole("button", { name: "Settings" }).first().click();
+    await firstPage.getByLabel("Username").fill("second-user");
+    await firstPage.getByLabel("Password").fill("another password");
+    await firstPage.getByRole("button", { name: "Create account" }).click();
+    await expect(firstPage.getByText("Account created. Share its username and password securely.")).toBeVisible();
+    await firstPage.getByRole("button", { name: "Sign out" }).click();
+    await firstPage.getByRole("button", { name: "Settings" }).first().click();
+    await firstPage.getByLabel("Username").fill("second-user");
+    await firstPage.getByLabel("Password").fill("another password");
+    await firstPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(firstPage.getByText("Signed in as second-user")).toBeVisible({ timeout: 15_000 });
+    await firstPage.getByRole("button", { name: "Close" }).click();
+    await expect(firstPage.getByRole("link", { name: "Cross-device note", exact: true })).toHaveCount(0);
+    await firstPage.getByRole("button", { name: "Settings" }).first().click();
+    await firstPage.getByRole("button", { name: "Sign out" }).click();
+    await firstPage.getByRole("button", { name: "Settings" }).first().click();
+    await firstPage.getByLabel("Username").fill("sync-owner");
+    await firstPage.getByLabel("Password").fill("correct horse battery staple");
+    await firstPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(firstPage.getByText("Signed in as sync-owner")).toBeVisible({ timeout: 15_000 });
+    await firstPage.getByRole("button", { name: "Close" }).click();
+    await expect(firstPage.getByRole("link", { name: "Cross-device note", exact: true })).toBeVisible();
     expect(
       (await firstContext.cookies()).some((cookie) => cookie.name === "papyr_session" && cookie.httpOnly),
     ).toBeTruthy();

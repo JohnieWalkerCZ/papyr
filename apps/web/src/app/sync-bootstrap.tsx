@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { api } from "@/lib/api-client";
+import { activateLocalAccount } from "@/lib/local-db";
 import { initializeSyncTriggers, setSyncAuthenticated, syncLocalLibrary } from "@/lib/sync";
 
 export function SyncBootstrap() {
@@ -9,7 +10,8 @@ export function SyncBootstrap() {
     initializeSyncTriggers();
     void api
       .me()
-      .then(() => {
+      .then(async (session) => {
+        await activateLocalAccount(session.id, session.isAdmin);
         setSyncAuthenticated(true);
         void syncLocalLibrary();
       })

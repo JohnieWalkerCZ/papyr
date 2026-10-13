@@ -131,7 +131,41 @@ export function createLocalDb(name = "papyr-local") {
   return db;
 }
 
-export const localDb = createLocalDb();
+export let localDb = createLocalDb("papyr-anonymous");
+let databaseActivation = Promise.resolve();
+
+export function activateLocalAccount(accountId: string | null, migrateLegacy = false): Promise<void> {
+  const name = accountId ? `papyr-account-${accountId}` : "papyr-anonymous";
+  if (localDb.name === name) return databaseActivation;
+  localDb.close();
+  localDb = createLocalDb(name);
+  const destination = localDb;
+  databaseActivation = (async () => {
+    if (!accountId || !migrateLegacy || localStorage.getItem(`papyr-legacy-migrated-${accountId}`)) return;
+    if (!(await Dexie.getDatabaseNames()).includes("papyr-local")) return;
+    const legacy = createLocalDb("papyr-local");
+    await Promise.all([legacy.open(), destination.open()]);
+    const tables = ["drafts", "snapshots", "entities", "outbox", "syncMeta", "conflicts", "assets"] as const;
+    for (const table of tables) await destination.table(table).bulkPut(await legacy.table(table).toArray());
+    legacy.close();
+    localStorage.setItem(`papyr-legacy-migrated-${accountId}`, "true");
+  })();
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("papyr-account-change"));
+  return databaseActivation;
+}
+
+export async function resetLocalPapyrData() {
+  localDb.close();
+  const names = await Dexie.getDatabaseNames();
+  await Promise.all(
+    names
+      .filter((name) => name === "papyr-local" || name.startsWith("papyr-account-") || name === "papyr-anonymous")
+      .map((name) => Dexie.delete(name)),
+  );
+  for (const storage of [localStorage, sessionStorage])
+    for (const key of Object.keys(storage)) if (key.startsWith("papyr-")) storage.removeItem(key);
+  localDb = createLocalDb("papyr-anonymous");
+}
 
 export async function storeLocalAttachment(file: File, database = localDb): Promise<LocalAsset> {
   const supported = ["image/png", "image/jpeg", "image/gif", "image/webp"];

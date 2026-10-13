@@ -87,6 +87,7 @@ Folder conflicts: show the destination/name problem; allow retry at root or choo
 - Use BroadcastChannel and Web Locks where supported to coordinate per-account sync; provide a safe fallback if Web Locks are unavailable.
 - Editing the **same note in two tabs of one browser profile** should have a single active writer or prominent read-only/lock takeover flow. Separate browser profiles/devices use normal server optimistic concurrency.
 - SignalR is a hint; do not use its event stream as authoritative change history.
+- Each authenticated account uses its own IndexedDB database; signed-out notes use a separate anonymous database. Logout switches to the anonymous database without deleting the account's notes or outbox.
 
 ## 8. Attachments and tldraw
 

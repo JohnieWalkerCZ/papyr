@@ -21,6 +21,7 @@ public sealed class PapyrDbContext(DbContextOptions<PapyrDbContext> options) : D
         modelBuilder.Entity<OwnerRecord>().Property(owner => owner.Username).HasMaxLength(64);
         modelBuilder.Entity<OwnerRecord>().HasIndex(owner => owner.Username).IsUnique();
         modelBuilder.Entity<OwnerRecord>().HasIndex(owner => owner.InstanceKey).IsUnique();
+        modelBuilder.Entity<OwnerRecord>().HasIndex(owner => owner.IsAdmin).IsUnique().HasFilter("is_admin = TRUE");
         modelBuilder.Entity<SessionRecord>().HasKey(session => session.TokenHash);
         modelBuilder.Entity<SessionRecord>().Property(session => session.TokenHash).HasMaxLength(64);
         modelBuilder.Entity<SessionRecord>().HasIndex(session => new { session.OwnerId, session.ExpiresAt });

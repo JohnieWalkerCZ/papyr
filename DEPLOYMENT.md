@@ -1,6 +1,6 @@
 # Deploy Papyr
 
-This guide runs Papyr as a private, single-owner service with Docker Compose. The supplied Compose file is a local/self-hosted baseline, not a production-hardened public deployment: add a TLS reverse proxy, firewall internal ports, use unique secrets, and validate backups before relying on the instance.
+This guide runs Papyr as a private, administrator-provisioned multi-account service with Docker Compose. The supplied Compose file is a local/self-hosted baseline, not a production-hardened public deployment: add a TLS reverse proxy, firewall internal ports, use unique secrets, and validate backups before relying on the instance.
 
 ## What runs
 
@@ -33,9 +33,9 @@ Requirements: Docker Engine and Docker Compose plugin. From the repository root:
 
 3. Check API health at `http://localhost:5080/health/live` and `http://localhost:5080/health/ready`, then open `http://localhost:6767`.
 
-4. In the web app, choose **First setup** and enter the configured setup token, a username, and a password (minimum 12 characters). This creates the only owner account. Save the username and password in your password manager. The setup token is only needed for this initial setup; remove it from `.env` after setup and restart the API container. Do not share the token or expose the setup screen to untrusted users before setup completes.
+4. In the web app, choose **First setup**, enter the configured setup token, a username, and a non-empty password, and confirm the permanent reset. This clears server records and attachment files, plus Papyr's local data in that browser. It creates the first administrator. Passwords have no configured length limit. Save the credentials in your password manager. Remove the setup token from `.env` after setup and restart the API container. Do not share the token or expose the setup screen to untrusted users before setup completes.
 
-5. Sign in from each device that should sync. Existing local notes are uploaded through the sync flow; check the status and Conflict Center if prompted.
+5. The administrator creates accounts from the **Server account** panel and shares credentials securely. Sign in to the same account on each device that should sync. Each account has an isolated server and browser library.
 
 Useful operations:
 
