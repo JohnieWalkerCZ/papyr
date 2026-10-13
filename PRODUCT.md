@@ -25,7 +25,7 @@ Core journeys:
 ### Library
 
 - Unlimited logical folder depth (subject to reasonable UI/server safety limits), root folder, nested folders.
-- Create, rename, move, soft-delete, restore folders and notes; deletion of a folder affects descendants.
+- Create, rename, move, soft-delete, restore, and permanently purge trashed folders and notes; folder actions affect descendants.
 - Stable IDs and human-readable titles; duplicate names are allowed within one folder in v1.
 - Sidebar tree, breadcrumbs, search by title and note text (locally indexed if feasible), recent notes.
 - Note type assigned at creation and immutable in MVP; conversion is a future explicit operation.

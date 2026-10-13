@@ -75,6 +75,15 @@ These are design defaults. The original product constraints (three formats, Dock
 - Consequences and migrations: IndexedDB v5 adds an `assets` store. PostgreSQL migration `202610110002_Attachments` adds metadata and reference tables. The `papyr-assets` volume and database must be backed up together. Migration rollback removes attachment metadata/references but leaves physical files; restore the matching backup pair before rollback. Orphan collection is intentionally deferred, so unused blobs consume storage.
 - Validation/tests: PostgreSQL integration coverage exercises verified upload, idempotent retry, authenticated retrieval, hash/type rejection, note-reference validation, and preservation of note data on rejected mutation. Browser tests cover offline attachment storage and editor reopening.
 
+### ADR-020 — Confirmed permanent trash purge
+- Date: 2026-10-13
+- Status: accepted
+- Context: Users need to permanently clear synced tombstones while preserving the local-first outbox and other-device change feed.
+- Decision: Empty Trash is an explicitly confirmed bulk action available only when its trashed entities have no pending operations or unresolved conflicts. Queue revision-checked `purge` operations atomically with local removal, process descendants before parent folders, physically remove server rows only after validating they are tombstoned and empty, and emit a `purge` change snapshot for every removed row. Keep attachment blobs after reference rows cascade away.
+- Alternatives considered: Local-only deletion (rejected because bootstrap would restore items); immediate server calls (rejected because offline use and lost acknowledgments would be unsafe); recursive server cascade purge (rejected because each stable entity needs its own feed event and revision check).
+- Consequences and migrations: No schema migration. The public mutation contract adds `purge`. Other profiles delete clean purged entities; profiles with local pending work retain a conflict until the user resolves it.
+- Validation/tests: Automated tests and cross-device browser coverage should include successful trash purge, acknowledged retries, conflict preservation on a second profile, and folder descendant ordering.
+
 ## Deliberate future ADR candidates
 
 Sharing & roles, per-note CRDT, folder permissions, encryption at rest/end-to-end, server-side Typst compilation, background sync service worker strategy, public account provisioning, library export/import.

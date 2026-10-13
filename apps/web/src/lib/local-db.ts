@@ -44,7 +44,7 @@ export interface LocalOperation {
   operationId: string;
   entityType: "folder" | "note";
   entityId: string;
-  action: "create" | "update" | "move" | "rename" | "delete" | "restore";
+  action: "create" | "update" | "move" | "rename" | "delete" | "restore" | "purge";
   baseRevision: string | null;
   payload:
     | LocalEntity
@@ -74,6 +74,8 @@ export interface LocalConflict {
   local: LocalEntity;
   remote: LocalEntity;
   detectedAt: number;
+  remotePurged?: boolean;
+  purgePending?: boolean;
 }
 
 export interface LocalAsset {
@@ -202,6 +204,7 @@ export async function resolveLocalConflict(
         ...local,
         id: createUuid(),
         title: `${local.title}${copySuffix}`,
+        deletedAt: null,
         revision: null,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -228,7 +231,51 @@ export async function resolveLocalConflict(
       if (action === "remote" && localSnapshot.kind === "note") await saveCopy(localSnapshot, false);
       if (action === "copy") await saveCopy(localSnapshot as LocalNote, true);
       await database.outbox.where("entityId").equals(conflict.id).delete();
-      await database.entities.put(conflict.remote);
+      if (conflict.remotePurged) await database.entities.delete(conflict.id);
+      else await database.entities.put(conflict.remote);
+    } else if (conflict.remotePurged) {
+      const local = { ...localSnapshot, deletedAt: null, revision: null, updatedAt: Date.now() } as LocalEntity;
+      const operation: LocalOperation = {
+        operationId: createUuid(),
+        entityType: local.kind,
+        entityId: local.id,
+        action: "create",
+        baseRevision: null,
+        payload: local,
+        createdAt: Math.max(Date.now(), ((await database.outbox.orderBy("createdAt").last())?.createdAt ?? 0) + 1),
+        attempts: 0,
+      };
+      await database.outbox.where("entityId").equals(local.id).delete();
+      await database.outbox.add(operation);
+      await database.entities.put(local);
+    } else if (conflict.purgePending) {
+      const local = localSnapshot;
+      let createdAt = Math.max(Date.now(), ((await database.outbox.orderBy("createdAt").last())?.createdAt ?? 0) + 1);
+      const operations: LocalOperation[] = [];
+      if (conflict.remote.deletedAt === null)
+        operations.push({
+          operationId: createUuid(),
+          entityType: local.kind,
+          entityId: local.id,
+          action: "delete",
+          baseRevision: conflict.remote.revision,
+          payload: { deletedAt: Date.now() },
+          createdAt: createdAt++,
+          attempts: 0,
+        });
+      operations.push({
+        operationId: createUuid(),
+        entityType: local.kind,
+        entityId: local.id,
+        action: "purge",
+        baseRevision: conflict.remote.revision,
+        payload: local,
+        createdAt,
+        attempts: 0,
+      });
+      await database.outbox.where("entityId").equals(local.id).delete();
+      await database.outbox.bulkAdd(operations);
+      await database.entities.delete(local.id);
     } else {
       const local = localSnapshot;
       const remote = conflict.remote;
@@ -443,4 +490,48 @@ export async function listLocalFolders(database = localDb): Promise<LocalFolder[
 
 export async function listLocalTrash(database = localDb): Promise<LocalEntity[]> {
   return database.entities.filter((entity) => entity.deletedAt !== null).toArray();
+}
+
+export async function clearLocalTrash(database = localDb) {
+  return database.transaction("rw", database.entities, database.outbox, database.conflicts, async () => {
+    const trash = (await database.entities.toArray()).filter((entity) => entity.deletedAt !== null);
+    if (!trash.length) return 0;
+    const ids = trash.map(({ id }) => id);
+    if (
+      trash.some((entity) => entity.revision === null) ||
+      (await database.outbox.where("entityId").anyOf(ids).count()) > 0 ||
+      (await database.conflicts.where("id").anyOf(ids).count()) > 0
+    ) {
+      throw new Error("TRASH_NOT_SYNCED");
+    }
+
+    const entities = new Map((await database.entities.toArray()).map((entity) => [entity.id, entity]));
+    const depth = (entity: LocalEntity) => {
+      let count = 0;
+      let parentId = entity.kind === "folder" ? entity.parentId : entity.folderId;
+      const seen = new Set([entity.id]);
+      while (parentId && entities.has(parentId) && !seen.has(parentId)) {
+        seen.add(parentId);
+        count++;
+        const parent = entities.get(parentId)!;
+        parentId = parent.kind === "folder" ? parent.parentId : null;
+      }
+      return count;
+    };
+    let createdAt = Math.max(Date.now(), ((await database.outbox.orderBy("createdAt").last())?.createdAt ?? 0) + 1);
+    for (const entity of [...trash].sort((left, right) => depth(right) - depth(left))) {
+      await database.outbox.add({
+        operationId: createUuid(),
+        entityType: entity.kind,
+        entityId: entity.id,
+        action: "purge",
+        baseRevision: entity.revision,
+        payload: entity,
+        createdAt: createdAt++,
+        attempts: 0,
+      });
+    }
+    await database.entities.bulkDelete(ids);
+    return trash.length;
+  });
 }

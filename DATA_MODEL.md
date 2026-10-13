@@ -46,6 +46,7 @@ A per-account `syncState` row with `latestSequence` plus `changeLog(ownerId, seq
 - Folder: many children and notes, single parent, owner scoped.
 - Note: single folder or root, immutable type, independent revision.
 - A folder soft-delete recursively tombstones all descendants **in one server transaction** and emits ordered change records for affected entities (or an explicitly documented cascade event that clients can deterministically apply).
+- Permanent purge is a separate revision-checked mutation allowed only for tombstoned entities. Purge descendants before parent folders, emit `purge` change snapshots, and keep attachment blobs after deleting note references.
 - Restore behavior in MVP: restore deleted item to its original parent if that parent exists; otherwise restore to root. Document how descendant restoration behaves and test it.
 - Name collisions are allowed; stable IDs disambiguate entities. No assumption that `(parent,title)` is unique.
 - Server is responsible for authorization regardless of client tree display.

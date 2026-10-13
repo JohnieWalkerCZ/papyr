@@ -17,7 +17,7 @@ Follow these phases in order. Build one vertical slice at a time and complete it
 ## Phase 1 — local-first library and Markdown
 
 - [x] Define IndexedDB schema/migration and typed repositories (v2 additive stores; atomic local Markdown-note create + outbox).
-- [x] Create folder tree, note list, breadcrumbs, new/rename/move/soft-delete/restore.
+- [x] Create folder tree, note list, breadcrumbs, new/rename/move/soft-delete/restore, and confirmed permanent Trash purge.
 - [ ] Add Markdown source editor, sanitized preview, native source export. (Source/export plus headings, emphasis, inline code, links, lists, quotes, fenced code, and local images work; tables and nested block syntax remain unsupported.)
 - [x] Implement immediate/delayed local save and reliable local status semantics.
 - [ ] Add keyboard navigation and responsive shell.

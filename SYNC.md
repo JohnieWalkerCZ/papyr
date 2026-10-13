@@ -29,6 +29,7 @@ Do not keep retrying in a tight loop. Use exponential backoff with jitter; stop/
 - Respect dependencies: create parent folder → create child note → upload attachment → publish note reference. If an op is blocked by conflict, independent ops may continue.
 - Acknowledge/delete an outbox entry only after a definitive receipt from server; `timeout` means **unknown**, so retry same ID.
 - Offline deletion uses tombstones and durable outbox entries.
+- Emptying Trash requires every selected tombstone to be synced and conflict-free. Persist ordered `purge` operations before removing local rows; purge descendants before folders and retain each outbox operation until its definitive server receipt.
 
 ## 4. Client algorithm
 
@@ -55,6 +56,8 @@ On sync:
     validation/auth/retry error -> preserve data and display appropriate status
   loop only while there is progress; back off on transport errors
 ```
+
+`purge` physically removes a server tombstone after checking `baseRevision`. It emits a `purge` change with the final entity snapshot so other devices can remove the row. A device with pending edits records a conflict and preserves its local version until the user resolves it. Attachment blobs remain stored after references are removed.
 
 Pull-before-push minimizes avoidable conflicts but does **not** eliminate races. The API must atomically compare baseRevision before write. Remote feed entries caused by previously acknowledged own mutations must be recognized by `operationId`; do not mislabel those as a conflict when newer local edits remain pending.
 

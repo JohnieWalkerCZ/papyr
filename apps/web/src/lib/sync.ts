@@ -219,6 +219,22 @@ async function applyChange(change: ServerChange, meta: LocalSyncMeta) {
     }
     return;
   }
+  if (change.action === "purge") {
+    const existingConflict = await localDb.conflicts.get(change.entityId);
+    if (pending.length || existingConflict) {
+      const pendingPurge = pending.find((operation) => operation.action === "purge");
+      const local = existingConflict?.local ?? current ?? (pendingPurge?.payload as LocalEntity | undefined);
+      if (local)
+        await localDb.conflicts.put({
+          id: change.entityId,
+          local,
+          remote: fromServer(change.entity),
+          detectedAt: Date.now(),
+          remotePurged: true,
+        });
+    } else await localDb.entities.delete(change.entityId);
+    return;
+  }
   if (pending.length && current && current.revision !== change.revision) {
     await localDb.conflicts.put({
       id: change.entityId,
@@ -257,13 +273,39 @@ async function pushOutbox(): Promise<SyncState> {
     } else if (result.status === "conflict") {
       const remote = await retryTransient(() => api.entity(operation.entityType, operation.entityId));
       const current = await localDb.entities.get(operation.entityId);
-      if (current)
+      const local = current ?? (operation.action === "purge" ? (operation.payload as LocalEntity) : undefined);
+      if (local)
         await localDb.conflicts.put({
-          id: current.id,
-          local: current,
+          id: operation.entityId,
+          local,
           remote: fromServer(remote),
           detectedAt: Date.now(),
+          purgePending: operation.action === "purge",
         });
+      blocked.add(operation.entityId);
+    } else if (result.status === "rejected" && operation.action === "purge" && result.error?.code === "NOT_DELETED") {
+      const remote = await retryTransient(() => api.entity(operation.entityType, operation.entityId));
+      await localDb.conflicts.put({
+        id: operation.entityId,
+        local: operation.payload as LocalEntity,
+        remote: fromServer(remote),
+        detectedAt: Date.now(),
+        purgePending: true,
+      });
+      blocked.add(operation.entityId);
+    } else if (
+      result.status === "rejected" &&
+      operation.action === "purge" &&
+      result.error?.code === "FOLDER_NOT_EMPTY"
+    ) {
+      const remote = await retryTransient(() => api.entity(operation.entityType, operation.entityId));
+      await localDb.conflicts.put({
+        id: operation.entityId,
+        local: operation.payload as LocalEntity,
+        remote: fromServer(remote),
+        detectedAt: Date.now(),
+        purgePending: true,
+      });
       blocked.add(operation.entityId);
     } else {
       return "error";

@@ -164,11 +164,29 @@ public static class SyncEndpoints
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            if (operation.EntityType is not ("folder" or "note") || operation.Action is not ("create" or "update" or "move" or "rename" or "delete" or "restore" or "purge"))
+                return await SaveFailure(db, transaction, ownerId, operation, "rejected", "INVALID_OPERATION", "Entity type or action is invalid.", null, cancellationToken);
             var current = await db.Entities.SingleOrDefaultAsync(item => item.OwnerId == ownerId && item.Id == operation.EntityId, cancellationToken);
             var foreignCollision = current is null && await db.Entities.AnyAsync(item => item.Id == operation.EntityId, cancellationToken);
             if (foreignCollision) return await SaveFailure(db, transaction, ownerId, operation, "rejected", "ID_IN_USE", "Entity ID is unavailable.", null, cancellationToken);
-            if (operation.EntityType is not ("folder" or "note") || operation.Action is not ("create" or "update" or "move" or "rename" or "delete" or "restore"))
-                return await SaveFailure(db, transaction, ownerId, operation, "rejected", "INVALID_OPERATION", "Entity type or action is invalid.", null, cancellationToken);
+            if (current is null && operation.Action == "purge")
+            {
+                if (!long.TryParse(operation.BaseRevision, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+                    return await SaveFailure(db, transaction, ownerId, operation, "rejected", "INVALID_BASE_REVISION", "A numeric base revision is required.", null, cancellationToken);
+                var noOpReceipt = new ReceiptRecord
+                {
+                    OwnerId = ownerId,
+                    OperationId = operation.OperationId,
+                    EntityId = operation.EntityId,
+                    Status = "accepted",
+                    Revision = 0,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.Receipts.Add(noOpReceipt);
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return ReceiptResult(noOpReceipt, duplicate: false);
+            }
 
             List<EntityRecord>? changedForRestore = null;
             if (operation.Action == "create")
@@ -210,6 +228,7 @@ public static class SyncEndpoints
                 var seq = await AddChange(db, ownerId, operation.OperationId, entity, operation.Action, cancellationToken);
                 if (entity.Id == current.Id) operationSequence = seq;
             }
+            if (operation.Action == "purge") db.Entities.Remove(current);
             var receipt = new ReceiptRecord
             {
                 OwnerId = ownerId,
@@ -371,6 +390,11 @@ public static class SyncEndpoints
                 if (entity.DeletedAt is null) return ("NOT_DELETED", "Entity is not in trash.");
                 entity.DeletedAt = null;
                 if (entity.ParentId is not null && !await db.Entities.AsNoTracking().AnyAsync(item => item.OwnerId == ownerId && item.Id == entity.ParentId && item.Kind == "folder" && item.DeletedAt == null, cancellationToken)) entity.ParentId = null;
+                break;
+            case "purge":
+                if (entity.DeletedAt is null) return ("NOT_DELETED", "Entity must be in trash before permanent deletion.");
+                if (entity.Kind == "folder" && await db.Entities.AnyAsync(item => item.OwnerId == ownerId && item.ParentId == entity.Id, cancellationToken))
+                    return ("FOLDER_NOT_EMPTY", "Purge child notes and folders before purging this folder.");
                 break;
         }
         entity.UpdatedAt = DateTimeOffset.UtcNow;

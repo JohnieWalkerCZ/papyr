@@ -45,7 +45,7 @@ No public sign-up in MVP. Setup and login are rate-limited. Setup is disabled un
 }
 ```
 
-Actions: `create`, `update`, `move`, `rename`, `delete`, `restore`. Entity types: `folder`, `note`. A create operation uses `baseRevision: null`. `update` can change permitted fields in one atomic entity revision. `move` uses a destination parent ID. `delete` means soft-delete; recursive folder behavior in `DATA_MODEL.md`.
+Actions: `create`, `update`, `move`, `rename`, `delete`, `restore`, `purge`. Entity types: `folder`, `note`. A create operation uses `baseRevision: null`. `update` can change permitted fields in one atomic entity revision. `move` uses a destination parent ID. `delete` means soft-delete; `purge` permanently removes an already trashed entity with a revision check. Purge child notes and folders before their parent folder.
 
 Operation processing: **each operation is its own DB transaction** (ordered processing with owner-scoped tree validation); a batch may partially succeed. Submit 1–100 operations per batch. Return one receipt per operation. Duplicate `(ownerId,operationId)` requests replay the saved receipt and do not create another change event. Note content is limited to 4,000,000 UTF-8 bytes; the API request body is limited to 5,000,000 bytes and folder depth to 64.
 
@@ -87,7 +87,7 @@ Whiteboard content must be a tldraw store snapshot with object-valued `store` an
 
 `GET /api/v1/assets/{id}` streams an authenticated image with `nosniff`, a private immutable cache policy, and `X-Content-SHA256`. The API stores opaque GUID filenames under `PAPYR_ASSET_STORAGE_PATH`; Compose mounts this as the durable `papyr-assets` volume. Markdown and Typst use `papyr-asset://<uuid>`; tldraw snapshots use `https://papyr.invalid/papyr-assets/<uuid>` because its schema requires valid URLs. Both forms are local references, never external fetch targets. Note mutations validate that every reference already belongs to the owner and update the reference index in the same database transaction. The client stores blobs in IndexedDB, uploads referenced blobs before note mutations, and downloads referenced blobs before applying remote snapshots.
 
-Permanent deletion and orphan collection are not implemented yet. Unreferenced assets are retained, which uses storage but avoids removing a blob that a pending or old snapshot may still need.
+Trashed entities can be permanently removed through `purge`. This deletes attachment-reference rows for purged notes; attachment blobs remain stored. Unreferenced assets are retained, which uses storage but avoids removing a blob that a pending or old snapshot may still need.
 
 ## Change response example
 

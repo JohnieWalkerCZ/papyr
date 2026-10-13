@@ -15,6 +15,7 @@ import {
 import {
   createFolder,
   localDb,
+  clearLocalTrash,
   listLocalFolders,
   listLocalNotes,
   listLocalTrash,
@@ -316,6 +317,22 @@ export default function Home() {
     scheduleSync();
   }
 
+  async function emptyTrash() {
+    if (!trash.length || !window.confirm(copy.confirmEmptyTrash(trash.length))) return;
+    try {
+      await clearLocalTrash();
+      await refresh();
+      setStatus(copy.trashCleared);
+      scheduleSync(0);
+    } catch (error) {
+      setStatus(
+        error instanceof Error && error.message === "TRASH_NOT_SYNCED"
+          ? copy.trashClearNeedsSync
+          : copy.trashClearError,
+      );
+    }
+  }
+
   async function confirmMove() {
     if (!movingItem) return;
     try {
@@ -333,11 +350,17 @@ export default function Home() {
     if (conflictBusy) return;
     const confirmation =
       action === "overwrite"
-        ? copy.confirmOverwrite
+        ? conflict.remotePurged
+          ? copy.confirmRestorePurged
+          : conflict.purgePending
+            ? copy.confirmPurgeConflict
+            : copy.confirmOverwrite
         : action === "remote"
-          ? conflict.local.kind === "folder"
-            ? copy.confirmKeepServerFolder
-            : copy.confirmKeepServer
+          ? conflict.remotePurged
+            ? copy.confirmAcceptPurge
+            : conflict.local.kind === "folder"
+              ? copy.confirmKeepServerFolder
+              : copy.confirmKeepServer
           : copy.confirmCopy;
     if (!window.confirm(confirmation)) return;
     setConflictBusy(true);
@@ -892,6 +915,11 @@ export default function Home() {
             )}
           </div>
           <div className="workspace-actions">
+            {view === "trash" && trash.length > 0 && (
+              <button className="danger-action" type="button" onClick={() => void emptyTrash()}>
+                {copy.emptyTrash}
+              </button>
+            )}
             {view !== "trash" && (
               <label className="sort-control">
                 {copy.sortBy}
@@ -1122,10 +1150,16 @@ export default function Home() {
                   disabled={conflictBusy}
                   onClick={() => void chooseConflict(activeConflict, "remote")}
                 >
-                  {copy.keepServer}
+                  {activeConflict.remotePurged ? copy.acceptServerPurge : copy.keepServer}
                 </button>
                 <p>
-                  {activeConflict.local.kind === "folder" ? copy.keepServerFolderHelp : copy.keepServerHelp}
+                  {activeConflict.remotePurged
+                    ? activeConflict.local.kind === "folder"
+                      ? copy.acceptPurgedFolderHelp
+                      : copy.acceptPurgedNoteHelp
+                    : activeConflict.local.kind === "folder"
+                      ? copy.keepServerFolderHelp
+                      : copy.keepServerHelp}
                 </p>
               </div>
               <div>
@@ -1135,9 +1169,19 @@ export default function Home() {
                   disabled={conflictBusy}
                   onClick={() => void chooseConflict(activeConflict, "overwrite")}
                 >
-                  {copy.keepLocal}
+                  {activeConflict.remotePurged
+                    ? copy.restorePurgedAction
+                    : activeConflict.purgePending
+                      ? copy.purgeConflictAction
+                      : copy.keepLocal}
                 </button>
-                <p>{copy.keepLocalHelp}</p>
+                <p>
+                  {activeConflict.remotePurged
+                    ? copy.restorePurgedHelp
+                    : activeConflict.purgePending
+                      ? copy.purgeConflictHelp
+                      : copy.keepLocalHelp}
+                </p>
               </div>
             </section>
           </>
