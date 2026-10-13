@@ -81,6 +81,21 @@ test("Typst preview renders a readable PDF page at mobile width", async ({ page 
   });
   expect(dimensions.width).toBeGreaterThan(100);
   expect(dimensions.height).toBeGreaterThan(200);
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByRole("button", { name: "Reset zoom to fit width" })).toHaveText("125%");
+  await expect.poll(() => pageCanvas.evaluate((canvas) => canvas.getBoundingClientRect().width)).toBeGreaterThan(390);
+  await expect
+    .poll(() => page.locator(".typst-pdf-pages").evaluate((element) => element.scrollWidth - element.clientWidth))
+    .toBeGreaterThan(0);
+  await page.locator(".typst-pdf-pages").dispatchEvent("wheel", {
+    deltaY: -50,
+    ctrlKey: true,
+    clientX: 200,
+    clientY: 200,
+    bubbles: true,
+    cancelable: true,
+  });
+  await expect(page.getByRole("button", { name: "Reset zoom to fit width" })).not.toHaveText("125%");
 });
 
 test("theme preference cycles through light, dark and system and persists", async ({ page }) => {

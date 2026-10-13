@@ -287,7 +287,7 @@ export default function TypstProof({
             {pdfUrl ? (
               <>
                 {compileError.length > 0 && <span className="stale-preview">{copy.stalePreview}</span>}
-                <PdfPreview title={copy.pdfOutput} url={pdfUrl} />
+                <PdfPreview key={pdfUrl} title={copy.pdfOutput} url={pdfUrl} controls={copy} />
               </>
             ) : (
               <p>{copy.emptyPreview}</p>
