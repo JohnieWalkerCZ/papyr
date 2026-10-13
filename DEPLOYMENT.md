@@ -97,6 +97,7 @@ The supplied `infra/compose.yaml` reads these values from a local `.env` file in
 | --- | --- | --- |
 | `PAPYR_DB_PASSWORD` | PostgreSQL password for the `papyr` role | Required for any hosted use; replace the Compose development fallback. |
 | `PAPYR_RESET_DB_PASSWORD` | Explicit one-time repair of an existing role password | Defaults to `false`; enable only to set the stored role password to `PAPYR_DB_PASSWORD`, then disable. |
+| `PAPYR_ADMIN_USERNAME`, `PAPYR_ADMIN_PASSWORD` | Administrator login credentials for explicit stack recovery | Required while `PAPYR_RESET_DB_PASSWORD=true`; private server values, never included in the web build. |
 | `PAPYR_INITIAL_SETUP_TOKEN` | Authorizes first-owner creation | At least 32 characters; remove after setup. |
 | `PAPYR_API_DIAGNOSTICS` | Preserve API startup logs after a crash | Set `true` temporarily when diagnosing startup failures; reset to `false` afterward. |
 | `PAPYR_API_START_CONDITION` | When the web service starts relative to the API | Defaults to `service_healthy`; set to `service_started` only during API diagnostics, then restore `service_healthy`. |
@@ -117,6 +118,16 @@ Changing `PAPYR_DB_PASSWORD` does **not** change the role password in an already
 ## Repair an existing database password mismatch in Portainer
 
 ### Through stack settings without container access
+
+Recovery now also creates an administrator or replaces the existing administrator's login credentials. Supply `PAPYR_ADMIN_USERNAME` and `PAPYR_ADMIN_PASSWORD` in the private `.env` or Portainer stack environment before enabling the flag. The API applies them after database-password repair and migrations. An existing administrator keeps its ID and all owned data; previous sessions are revoked. A username belonging to another account is rejected. No first-setup data reset runs. Missing/invalid credentials leave the API in diagnostic mode with `ADMIN_RECOVERY_FAILED` (the database password may already have been repaired); correct the values and redeploy. The administrator password is hashed before storage and never returned to the browser or printed in application logs.
+
+```dotenv
+PAPYR_RESET_DB_PASSWORD=true
+PAPYR_ADMIN_USERNAME=admin
+PAPYR_ADMIN_PASSWORD=<your-private-login-password>
+```
+
+After recovery, sign in using these administrator credentials, disable the reset flag, and remove `PAPYR_ADMIN_PASSWORD` from the running stack environment if you no longer need it. Keep a private offline copy of the credentials if desired; never commit a populated `.env`.
 
 Update the stack to the current Compose file, keep the intended `PAPYR_DB_PASSWORD`, and explicitly set `PAPYR_RESET_DB_PASSWORD=true`. Redeploy the stack. A one-shot `db-password-reset` service connects through PostgreSQL's shared local Unix socket, uses `psql`'s `\password` command to update only the `papyr` role password, and must complete successfully before the API starts. It has no network access and no mount of the database or attachment files. Password input is not printed and only its encrypted form is sent to PostgreSQL.
 

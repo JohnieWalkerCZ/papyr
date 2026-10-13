@@ -205,7 +205,7 @@ public static class AuthEndpoints
         };
     }
 
-    private static bool ValidCredentials(string? username, string? password) =>
+    internal static bool ValidCredentials(string? username, string? password) =>
         !string.IsNullOrWhiteSpace(username) && username.Trim().Length is >= 3 and <= 64 && username.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-' or '@') && !string.IsNullOrEmpty(password);
 
     private static object Error(string code, string message) => new { error = new { code, message } };

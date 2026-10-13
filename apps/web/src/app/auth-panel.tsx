@@ -9,6 +9,7 @@ import { useLocale } from "@/lib/locale";
 export function AuthPanel() {
   const copy = useLocale().auth;
   const setupDiagnostics: Record<string, string> = {
+    ADMIN_RECOVERY_FAILED: copy.setupAdminRecoveryError,
     DATABASE_SCHEMA_ERROR: copy.setupDatabaseSchemaError,
     DATABASE_AUTH_FAILED: copy.setupDatabaseAuthError,
     DATABASE_NOT_FOUND: copy.setupDatabaseMissing,

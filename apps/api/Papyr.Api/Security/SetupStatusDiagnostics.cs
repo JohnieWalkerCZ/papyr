@@ -8,6 +8,8 @@ public static class SetupStatusDiagnostics
 {
     public static SetupStatusDiagnostic Describe(Exception error)
     {
+        if (Find<AdministratorRecoveryException>(error) is { } recovery)
+            return new("ADMIN_RECOVERY_FAILED", recovery.Message);
         var postgres = Find<PostgresException>(error);
         return postgres?.SqlState switch
         {

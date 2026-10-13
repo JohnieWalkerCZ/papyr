@@ -18,6 +18,8 @@ If startup database migrations fail, the API serves diagnostics only: `/health/l
 
 ## Reading and change feed
 
+Stack recovery is an operator startup action, not a public enrollment endpoint: `PAPYR_RESET_DB_PASSWORD=true` repairs the database role password and then creates or recovers the administrator from `PAPYR_ADMIN_USERNAME` / `PAPYR_ADMIN_PASSWORD`. Existing administrator ID, notes, and attachments are preserved; old administrator sessions are revoked. An invalid credential configuration or username belonging to another account yields `ADMIN_RECOVERY_FAILED` in diagnostic mode and does not change account records. Disable the flag after recovery; credentials are never returned by the API.
+
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/v1/bootstrap?cursorToken=...` | Consistent paginated initial snapshot of folders, notes and metadata, with final cursor |

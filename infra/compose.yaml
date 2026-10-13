@@ -42,6 +42,8 @@ services:
       PGPASSWORD: ${PAPYR_DB_PASSWORD:-papyr-dev-only}
       # Recreate the API when the operator toggles recovery so startup migrations retry.
       PAPYR_RESET_DB_PASSWORD: ${PAPYR_RESET_DB_PASSWORD:-false}
+      PAPYR_ADMIN_USERNAME: ${PAPYR_ADMIN_USERNAME:-}
+      PAPYR_ADMIN_PASSWORD: ${PAPYR_ADMIN_PASSWORD:-}
       PAPYR_API_DIAGNOSTICS: ${PAPYR_API_DIAGNOSTICS:-false}
       PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
       PAPYR_COOKIE_SECURE: ${PAPYR_COOKIE_SECURE:-false}

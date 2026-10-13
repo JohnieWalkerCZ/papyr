@@ -66,33 +66,34 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
-if (!bool.TryParse(builder.Configuration["PAPYR_MIGRATE_ON_STARTUP"], out var migrateOnStartup) || migrateOnStartup)
+try
 {
-    try
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<PapyrDbContext>();
+    if (!bool.TryParse(builder.Configuration["PAPYR_MIGRATE_ON_STARTUP"], out var migrateOnStartup) || migrateOnStartup)
+        await db.Database.MigrateAsync();
+    if (builder.Configuration["PAPYR_RESET_DB_PASSWORD"] == "true")
+        await AdministratorRecovery.ApplyAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordHasher<OwnerRecord>>(), builder.Configuration);
+}
+catch (Exception error) when (error is not OperationCanceledException)
+{
+    var diagnostic = SetupStatusDiagnostics.Describe(error);
+    var diagnosticId = Guid.NewGuid().ToString();
+    app.Logger.LogError(error, "API initialization failed with {DiagnosticCode}; diagnostic id {DiagnosticId}. Only diagnostics are available until restart.", diagnostic.Code, diagnosticId);
+    // A failed migration must never enable authentication or application writes.
+    app.Run(async context =>
     {
-        await using var scope = app.Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<PapyrDbContext>().Database.MigrateAsync();
-    }
-    catch (Exception error) when (error is not OperationCanceledException)
-    {
-        var diagnostic = SetupStatusDiagnostics.Describe(error);
-        var diagnosticId = Guid.NewGuid().ToString();
-        app.Logger.LogError(error, "API startup migrations failed with {DiagnosticCode}; diagnostic id {DiagnosticId}. Only diagnostics are available until restart.", diagnostic.Code, diagnosticId);
-        // A failed migration must never enable authentication or application writes.
-        app.Run(async context =>
+        context.Response.Headers.CacheControl = "no-store";
+        if (context.Request.Path == "/health/live")
         {
-            context.Response.Headers.CacheControl = "no-store";
-            if (context.Request.Path == "/health/live")
-            {
-                await context.Response.WriteAsJsonAsync(new { status = "diagnostic" });
-                return;
-            }
-            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await context.Response.WriteAsJsonAsync(new { error = new { code = diagnostic.Code, message = diagnostic.Message }, diagnosticId });
-        });
-        app.Run();
-        return;
-    }
+            await context.Response.WriteAsJsonAsync(new { status = "diagnostic" });
+            return;
+        }
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new { error = new { code = diagnostic.Code, message = diagnostic.Message }, diagnosticId });
+    });
+    app.Run();
+    return;
 }
 
 app.Services.GetServices<IHostedService>().OfType<ChangeRetentionService>().Single().StartupCompleted = true;

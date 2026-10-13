@@ -1,5 +1,11 @@
 # DECISIONS.md — architecture decision log
 
+### Stack recovery — administrator credentials (2026-10-13)
+
+- User explicitly requested that the existing reset flag also create an administrator whose credentials come from the environment file. Require private `PAPYR_ADMIN_USERNAME` and `PAPYR_ADMIN_PASSWORD` when `PAPYR_RESET_DB_PASSWORD=true`; apply administrator recovery after database password repair and startup migrations.
+- Reuse the existing administrator ID to preserve its notes, attachments, and sync ownership. Create an administrator only if none exists; reject a username owned by another account, reuse the normal credential validation/password hasher, and atomically revoke existing administrator sessions. No initial-setup purge or schema migration is performed.
+- Recovery stays disabled by default. Invalid administrator credentials yield safe diagnostic mode; the earlier database password repair is a separate operation and may already have succeeded. Disable recovery after success and protect/remove the environment secret as appropriate.
+
 ### Deployment recovery — explicit stack-only password reset (2026-10-13)
 
 - User requested recovery through Portainer stack settings without container-console access. Add a one-shot maintenance service enabled only by `PAPYR_RESET_DB_PASSWORD=true`; it updates the existing `papyr` role password to the explicitly supplied `PAPYR_DB_PASSWORD` via the database's local Unix socket and `psql`'s client-side password encryption.

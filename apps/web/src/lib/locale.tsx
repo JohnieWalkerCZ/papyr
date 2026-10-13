@@ -33,6 +33,8 @@ export const messages = {
       setupDiagnostic: (status: number, code?: string, diagnosticId?: string) =>
         `HTTP ${status}${code ? ` · ${code}` : ""}${diagnosticId ? ` · reference ${diagnosticId}` : ""}`,
       setupDatabaseSchemaError: "The database schema is incomplete. Check that API migrations completed.",
+      setupAdminRecoveryError:
+        "Administrator recovery failed. Set a valid PAPYR_ADMIN_USERNAME and non-empty PAPYR_ADMIN_PASSWORD in the stack environment. Choose a username not owned by another account.",
       setupDatabaseAuthError:
         "PostgreSQL rejected the API credentials. Check the API and database passwords in Portainer.",
       setupDatabaseMissing: "The Papyr database was not found. Check the database name in the API settings.",
@@ -325,6 +327,8 @@ export const messages = {
       setupDiagnostic: (status: number, code?: string, diagnosticId?: string) =>
         `HTTP ${status}${code ? ` · ${code}` : ""}${diagnosticId ? ` · reference ${diagnosticId}` : ""}`,
       setupDatabaseSchemaError: "Schéma databáze není úplné. Ověřte, že se dokončily migrace API.",
+      setupAdminRecoveryError:
+        "Obnova správce selhala. V prostředí stacku nastavte platné PAPYR_ADMIN_USERNAME a neprázdné PAPYR_ADMIN_PASSWORD. Zvolte jméno, které nepatří jinému účtu.",
       setupDatabaseAuthError:
         "PostgreSQL odmítl přihlašovací údaje API. Zkontrolujte hesla API a databáze v Portaineru.",
       setupDatabaseMissing: "Databáze Papyr nebyla nalezena. Zkontrolujte název databáze v nastavení API.",

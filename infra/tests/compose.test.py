@@ -40,5 +40,19 @@ class ComposePasswordTests(unittest.TestCase):
                 self.assertNotIn('papyr-postgres', str(reset['volumes']))
 
 
+    def test_administrator_credentials_reach_only_the_api(self):
+        root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            ['docker', 'compose', '-f', str(root / 'infra/compose.yaml'), 'config', '--format', 'json'],
+            env={**os.environ, 'PAPYR_ADMIN_USERNAME': 'recovered-admin', 'PAPYR_ADMIN_PASSWORD': 'private;recovery$password'},
+            check=True, capture_output=True, text=True,
+        )
+        services = json.loads(result.stdout)['services']
+        self.assertEqual(services['api']['environment']['PAPYR_ADMIN_USERNAME'], 'recovered-admin')
+        self.assertEqual(services['api']['environment']['PAPYR_ADMIN_PASSWORD'].replace('$$', '$'), 'private;recovery$password')
+        for name in ['web', 'db', 'db-password-reset']:
+            self.assertNotIn('PAPYR_ADMIN_PASSWORD', services[name].get('environment', {}))
+
+
 if __name__ == '__main__':
     unittest.main()
