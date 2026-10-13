@@ -12,10 +12,52 @@ import {
   moveLocalEntity,
   resolveLocalConflict,
   renameLocalEntity,
+  repairRejectedUnsyncedOperation,
   setDeletedLocalEntity,
   storeLocalAttachment,
   updateLocalNote,
 } from "../src/lib/local-db.ts";
+
+test("orphan unsynced delete is repaired without losing the Trash snapshot", async () => {
+  const db = createLocalDb(`repair-delete-${crypto.randomUUID()}`);
+  const note = await createMarkdownNote("Preserved in Trash", db);
+  await updateLocalNote(note.id, { content: "Keep exact source" }, db);
+  await db.outbox.clear();
+  await setDeletedLocalEntity(note.id, true, db);
+  const original = await db.outbox.toArray();
+  const snapshot = await db.entities.get(note.id);
+  assert.equal(await repairRejectedUnsyncedOperation(original[0].operationId, db), true);
+  const repaired = await db.outbox.orderBy("createdAt").toArray();
+  assert.deepEqual(
+    repaired.map((operation) => operation.action),
+    ["create", "delete"],
+  );
+  assert.ok(repaired.every((operation) => operation.operationId !== original[0].operationId));
+  assert.equal(repaired[0].payload.content, "Keep exact source");
+  assert.equal(repaired[0].payload.deletedAt, null);
+  assert.deepEqual(repaired[1].payload, original[0].payload);
+  assert.deepEqual(await db.entities.get(note.id), snapshot);
+  assert.equal(await repairRejectedUnsyncedOperation(repaired[1].operationId, db), false);
+  await db.delete();
+});
+
+test("failed orphan-delete repair rolls back and synced deletes are not recreated", async () => {
+  const db = createLocalDb(`repair-rollback-${crypto.randomUUID()}`);
+  const note = await createMarkdownNote("Preserved", db);
+  await db.outbox.clear();
+  await setDeletedLocalEntity(note.id, true, db);
+  const [operation] = await db.outbox.toArray();
+  const reject = () => {
+    throw new Error("simulated quota failure");
+  };
+  db.outbox.hook("creating", reject);
+  await assert.rejects(repairRejectedUnsyncedOperation(operation.operationId, db), /quota failure/);
+  db.outbox.hook("creating").unsubscribe(reject);
+  assert.deepEqual(await db.outbox.toArray(), [operation]);
+  await db.entities.update(note.id, { revision: "3" });
+  assert.equal(await repairRejectedUnsyncedOperation(operation.operationId, db), false);
+  await db.delete();
+});
 
 test("each signed-in account reopens only its own local library", async () => {
   const id = crypto.randomUUID();

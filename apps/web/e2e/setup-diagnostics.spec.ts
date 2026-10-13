@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 
+test("COOP headers use the public Host rather than the internal Next.js hostname", async ({ request }) => {
+  const remote = await request.get("/", { headers: { Host: "honzaprochazka.eu:6767" } });
+  expect(remote.status()).toBe(200);
+  expect(remote.headers()["cross-origin-opener-policy"]).toBeUndefined();
+  expect(remote.headers()["cross-origin-embedder-policy"]).toBeUndefined();
+  const local = await request.get("/", { headers: { Host: "localhost:3001" } });
+  expect(local.headers()["cross-origin-opener-policy"]).toBe("same-origin");
+});
+
 test("setup proxy failures are explained in Settings without API log access", async ({ page }) => {
   await page.route("**/api/v1/auth/setup-status", (route) =>
     route.fulfill({

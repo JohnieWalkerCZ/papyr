@@ -4,6 +4,7 @@ import { HubConnectionBuilder, HubConnectionState, type HubConnection } from "@m
 import { retryTransient } from "@/lib/sync-retry";
 import {
   localDb,
+  repairRejectedUnsyncedOperation,
   resolveLocalConflict,
   type LocalConflict,
   type LocalEntity,
@@ -307,6 +308,12 @@ async function pushOutbox(): Promise<SyncState> {
         purgePending: true,
       });
       blocked.add(operation.entityId);
+    } else if (
+      result.status === "rejected" &&
+      result.error?.code === "NOT_FOUND" &&
+      (await repairRejectedUnsyncedOperation(operation.operationId))
+    ) {
+      return pushOutbox();
     } else {
       return "error";
     }

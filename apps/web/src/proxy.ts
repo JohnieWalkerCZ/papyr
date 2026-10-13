@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
   const response = NextResponse.next();
-  const hostname = request.nextUrl.hostname.toLowerCase();
+  const hostname = new URL(`http://${request.headers.get("host") ?? request.nextUrl.host}`).hostname.toLowerCase();
   if (
     request.nextUrl.protocol === "https:" ||
     hostname === "localhost" ||

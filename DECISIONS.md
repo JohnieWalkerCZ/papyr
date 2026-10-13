@@ -1,5 +1,11 @@
 # DECISIONS.md — architecture decision log
 
+### Sync recovery — orphan unsynced note deletion (2026-10-13)
+
+- The deployed server rejected a note `delete` with `NOT_FOUND` and `baseRevision: null`. For this narrow case, when the local note also has no acknowledged revision and no queued create, atomically preserve its full snapshot in a new create operation followed by the original delete payload under a fresh operation ID. Rejected server receipts remain permanent; do not retry a changed operation with the rejected ID.
+- Keep local Trash content and all unrelated pending operations. Normal server acknowledgments rebase the replacement delete onto the created revision, so the resulting server tombstone remains restorable. Do not recreate acknowledged notes, folders, or other rejected mutations; do not overwrite remote data or move notes to a different parent automatically. No schema migration is required.
+- Fix HTTP COOP detection to use the request's public Host header rather than Next.js's internal URL hostname, preserving isolation headers for HTTPS/loopback contexts.
+
 ### Stack recovery — administrator credentials (2026-10-13)
 
 - User explicitly requested that the existing reset flag also create an administrator whose credentials come from the environment file. Require private `PAPYR_ADMIN_USERNAME` and `PAPYR_ADMIN_PASSWORD` when `PAPYR_RESET_DB_PASSWORD=true`; apply administrator recovery after database password repair and startup migrations.

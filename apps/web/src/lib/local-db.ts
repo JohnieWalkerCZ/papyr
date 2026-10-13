@@ -510,6 +510,40 @@ export async function setDeletedLocalEntity(id: string, deleted: boolean, databa
   });
 }
 
+export async function repairRejectedUnsyncedOperation(operationId: string, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.entities, database.outbox, async () => {
+    const operation = await database.outbox.get(operationId);
+    if (
+      !operation ||
+      operation.baseRevision !== null ||
+      operation.action !== "delete" ||
+      operation.entityType !== "note"
+    )
+      return false;
+    const entity = await database.entities.get(operation.entityId);
+    if (!entity || entity.revision !== null) return false;
+    if (
+      await database.outbox
+        .where("entityId")
+        .equals(entity.id)
+        .filter((pending) => pending.action === "create")
+        .count()
+    )
+      return false;
+    // Rejected receipts are permanent; preserve the delete under a fresh operation ID.
+    await database.outbox.add({
+      ...operation,
+      operationId: createUuid(),
+      action: "create",
+      payload: { ...entity, deletedAt: null },
+      createdAt: operation.createdAt - 1,
+    });
+    await database.outbox.add({ ...operation, operationId: createUuid() });
+    await database.outbox.delete(operation.operationId);
+    return true;
+  });
+}
+
 export async function listLocalNotes(database = localDb): Promise<LocalNote[]> {
   return ((await database.entities.where("kind").equals("note").sortBy("updatedAt")) as LocalNote[])
     .filter((note) => !note.deletedAt)

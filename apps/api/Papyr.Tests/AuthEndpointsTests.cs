@@ -301,6 +301,22 @@ public sealed class AuthEndpointsTests
             using var retained = JsonDocument.Parse(await retainedChanges.Content.ReadAsStringAsync());
             Assert.Single(retained.RootElement.GetProperty("changes").EnumerateArray());
 
+            var orphanId = Guid.NewGuid();
+            var orphanDelete = new { operationId = Guid.NewGuid(), entityType = "note", entityId = orphanId, action = "delete", baseRevision = (string?)null, payload = new { deletedAt = DateTimeOffset.UtcNow } };
+            using var rejectedDelete = await Post(client, "/api/v1/mutations", new { operations = new[] { orphanDelete } }, csrf);
+            Assert.Contains("NOT_FOUND", await rejectedDelete.Content.ReadAsStringAsync());
+            var repairedCreate = new { operationId = Guid.NewGuid(), entityType = "note", entityId = orphanId, action = "create", baseRevision = (string?)null, payload = new { title = "Trash recovery", type = "markdown", content = "Preserved exact source", folderId = (Guid?)null, contentSchemaVersion = (int?)null } };
+            using var repairCreated = await Post(client, "/api/v1/mutations", new { operations = new[] { repairedCreate } }, csrf);
+            Assert.Equal("accepted", FirstMutationStatus(await repairCreated.Content.ReadAsStringAsync()));
+            using var permanentlyRejected = await Post(client, "/api/v1/mutations", new { operations = new[] { orphanDelete } }, csrf);
+            Assert.Equal("rejected", FirstMutationStatus(await permanentlyRejected.Content.ReadAsStringAsync()));
+            var repairedDelete = new { operationId = Guid.NewGuid(), entityType = "note", entityId = orphanId, action = "delete", baseRevision = "1", payload = orphanDelete.payload };
+            using var repairDeleted = await Post(client, "/api/v1/mutations", new { operations = new[] { repairedDelete } }, csrf);
+            Assert.Equal("accepted", FirstMutationStatus(await repairDeleted.Content.ReadAsStringAsync()));
+            using var tombstone = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/notes/{orphanId}"));
+            Assert.Equal("Preserved exact source", tombstone.RootElement.GetProperty("content").GetString());
+            Assert.NotEqual(JsonValueKind.Null, tombstone.RootElement.GetProperty("deletedAt").ValueKind);
+
             using var createdAccount = await Post(client, "/api/v1/auth/accounts", new { username = "second-user", password = "another password" }, csrf);
             Assert.Equal(HttpStatusCode.Created, createdAccount.StatusCode);
             using var secondClient = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
