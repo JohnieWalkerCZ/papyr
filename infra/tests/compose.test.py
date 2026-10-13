@@ -20,7 +20,24 @@ class ComposePasswordTests(unittest.TestCase):
                 # Compose config escapes dollars for reuse as a Compose file.
                 self.assertEqual(api['PGPASSWORD'].replace('$$', '$'), password)
                 self.assertEqual(services['db']['environment']['POSTGRES_PASSWORD'].replace('$$', '$'), password)
+                self.assertEqual(services['db-password-reset']['environment']['POSTGRES_PASSWORD'].replace('$$', '$'), password)
                 self.assertEqual(api['ConnectionStrings__Papyr'], 'Host=db;Database=papyr;Username=papyr')
+
+    def test_password_reset_requires_explicit_opt_in_and_blocks_api_until_completed(self):
+        root = Path(__file__).resolve().parents[2]
+        for enabled in ['false', 'true']:
+            with self.subTest(enabled=enabled):
+                result = subprocess.run(
+                    ['docker', 'compose', '-f', str(root / 'infra/compose.yaml'), 'config', '--format', 'json'],
+                    env={**os.environ, 'PAPYR_RESET_DB_PASSWORD': enabled},
+                    check=True, capture_output=True, text=True,
+                )
+                services = json.loads(result.stdout)['services']
+                reset = services['db-password-reset']
+                self.assertEqual(reset['environment']['PAPYR_RESET_DB_PASSWORD'], enabled)
+                self.assertEqual(reset['network_mode'], 'none')
+                self.assertEqual(services['api']['depends_on']['db-password-reset']['condition'], 'service_completed_successfully')
+                self.assertNotIn('papyr-postgres', str(reset['volumes']))
 
 
 if __name__ == '__main__':

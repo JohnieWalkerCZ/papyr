@@ -96,6 +96,7 @@ The supplied `infra/compose.yaml` reads these values from a local `.env` file in
 | Variable | Purpose | Guidance |
 | --- | --- | --- |
 | `PAPYR_DB_PASSWORD` | PostgreSQL password for the `papyr` role | Required for any hosted use; replace the Compose development fallback. |
+| `PAPYR_RESET_DB_PASSWORD` | Explicit one-time repair of an existing role password | Defaults to `false`; enable only to set the stored role password to `PAPYR_DB_PASSWORD`, then disable. |
 | `PAPYR_INITIAL_SETUP_TOKEN` | Authorizes first-owner creation | At least 32 characters; remove after setup. |
 | `PAPYR_API_DIAGNOSTICS` | Preserve API startup logs after a crash | Set `true` temporarily when diagnosing startup failures; reset to `false` afterward. |
 | `PAPYR_API_START_CONDITION` | When the web service starts relative to the API | Defaults to `service_healthy`; set to `service_started` only during API diagnostics, then restore `service_healthy`. |
@@ -114,6 +115,14 @@ Compose passes the API database password separately as `PGPASSWORD`, which Npgsq
 Changing `PAPYR_DB_PASSWORD` does **not** change the role password in an already initialized PostgreSQL volume. PostgreSQL can pass the supplied `pg_isready` healthcheck while rejecting the API's password; startup migrations then fail before the API listens. Preserve the existing password, or have the host administrator perform a coordinated database password rotation. Do not delete the database volume to resolve a credential mismatch. An empty setup token only disables first setup; it does not prevent API startup or the setup-status GET.
 
 ## Repair an existing database password mismatch in Portainer
+
+### Through stack settings without container access
+
+Update the stack to the current Compose file, keep the intended `PAPYR_DB_PASSWORD`, and explicitly set `PAPYR_RESET_DB_PASSWORD=true`. Redeploy the stack. A one-shot `db-password-reset` service connects through PostgreSQL's shared local Unix socket, uses `psql`'s `\password` command to update only the `papyr` role password, and must complete successfully before the API starts. It has no network access and no mount of the database or attachment files. Password input is not printed and only its encrypted form is sent to PostgreSQL.
+
+After Settings can check setup successfully, remove `PAPYR_RESET_DB_PASSWORD` or set it to `false` and redeploy again. Existing database and attachment volumes remain intact; do not remove or rename the stack or volumes during this repair. The reset is disabled by default and rejects an empty or multiline password. If local socket authentication was hardened, the reset fails without weakening authentication; an administrator must then perform the rotation. The helper uses the same pinned PostgreSQL image already used by the database.
+
+### Through the database console when available
 
 `DATABASE_AUTH_FAILED` means PostgreSQL rejected the API's credentials. If `PAPYR_DB_PASSWORD` was changed after the database volume was initialized, either restore the original stack value or explicitly update the stored database role password to the intended stack value. Redeploying containers alone does not change that stored password.
 

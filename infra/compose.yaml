@@ -40,6 +40,8 @@ services:
     environment:
       ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr
       PGPASSWORD: ${PAPYR_DB_PASSWORD:-papyr-dev-only}
+      # Recreate the API when the operator toggles recovery so startup migrations retry.
+      PAPYR_RESET_DB_PASSWORD: ${PAPYR_RESET_DB_PASSWORD:-false}
       PAPYR_API_DIAGNOSTICS: ${PAPYR_API_DIAGNOSTICS:-false}
       PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
       PAPYR_COOKIE_SECURE: ${PAPYR_COOKIE_SECURE:-false}
@@ -58,11 +60,43 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-password-reset:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8080'"]
       interval: 5s
       timeout: 3s
       retries: 20
+
+  db-password-reset:
+    image: postgres:17.6-alpine
+    user: postgres
+    network_mode: none
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ "$${PAPYR_RESET_DB_PASSWORD:-false}" != "true" ]; then
+          echo "Database password reset disabled."
+          exit 0
+        fi
+        : "$${POSTGRES_PASSWORD:?Set PAPYR_DB_PASSWORD before enabling password reset}"
+        if [ "$$(printf '%s' "$$POSTGRES_PASSWORD" | wc -l)" -ne 0 ]; then
+          echo "Database password reset requires a single-line password." >&2
+          exit 1
+        fi
+        printf '%s\n%s\n' "$$POSTGRES_PASSWORD" "$$POSTGRES_PASSWORD" |
+          psql -X -w -v ON_ERROR_STOP=1 -h /var/run/postgresql -U papyr -d papyr -c '\password papyr'
+        echo "Database role password updated; database contents preserved."
+    environment:
+      PAPYR_RESET_DB_PASSWORD: ${PAPYR_RESET_DB_PASSWORD:-false}
+      POSTGRES_PASSWORD: ${PAPYR_DB_PASSWORD:-}
+    volumes:
+      - papyr-db-socket:/var/run/postgresql
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:17.6-alpine
@@ -72,6 +106,7 @@ services:
       POSTGRES_PASSWORD: ${PAPYR_DB_PASSWORD:-papyr-dev-only}
     volumes:
       - papyr-postgres:/var/lib/postgresql/data
+      - papyr-db-socket:/var/run/postgresql
     networks:
       papyr:
         ipv4_address: ${PAPYR_DB_IP:-10.253.0.4}
@@ -84,6 +119,7 @@ services:
 volumes:
   papyr-postgres:
   papyr-assets:
+  papyr-db-socket:
 
 networks:
   papyr:

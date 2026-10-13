@@ -1,5 +1,11 @@
 # DECISIONS.md — architecture decision log
 
+### Deployment recovery — explicit stack-only password reset (2026-10-13)
+
+- User requested recovery through Portainer stack settings without container-console access. Add a one-shot maintenance service enabled only by `PAPYR_RESET_DB_PASSWORD=true`; it updates the existing `papyr` role password to the explicitly supplied `PAPYR_DB_PASSWORD` via the database's local Unix socket and `psql`'s client-side password encryption.
+- Add a shared socket volume, with no database-file mount or network access for the helper. API startup waits for successful completion; disabled mode exits without connecting. Empty or multiline passwords fail before any change. No notes, attachments, schema, or stored data are reset, and no network trust rule is introduced. Existing hardened local authentication can prevent this repair and requires administrator intervention.
+- This is explicit operator recovery, not automatic password rotation. Disable the flag after recovery; preserve the existing stack/project and data volumes. Test against a retained PostgreSQL volume and verify API recovery and existing-row preservation.
+
 ### Deployment diagnostics — failed startup migrations (2026-10-13)
 
 - A startup migration failure starts a restricted diagnostic listener instead of terminating before setup-status can report the database error. All application requests return `503`; only liveness returns `200` with an explicit diagnostic status. Readiness remains unavailable. No authentication, hosted retention service, or mutation endpoints are enabled in this mode.
