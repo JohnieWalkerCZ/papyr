@@ -6,6 +6,7 @@ services:
       args:
         NEXT_PUBLIC_TLDRAW_LICENSE_KEY: ${NEXT_PUBLIC_TLDRAW_LICENSE_KEY:-}
         PAPYR_API_ORIGIN: http://api:8080
+    pull_policy: build
     ports:
       - "${PAPYR_WEB_PORT:-6767}:3000"
     networks:
@@ -22,6 +23,7 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Papyr.Api/Dockerfile
+    pull_policy: build
     environment:
       ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr;Password=${PAPYR_DB_PASSWORD:-papyr-dev-only}
       PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
