@@ -24,8 +24,22 @@ services:
       context: ..
       dockerfile: apps/api/Papyr.Api/Dockerfile
     pull_policy: build
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ "$${PAPYR_API_DIAGNOSTICS:-false}" = "true" ]; then
+          echo "Papyr API diagnostic mode; architecture=$$(uname -m)"
+          dotnet --info
+          dotnet Papyr.Api.dll
+          code=$$?
+          echo "Papyr API exited with code $$code; holding container for Portainer log inspection."
+          sleep 3600
+          exit "$$code"
+        fi
+        exec dotnet Papyr.Api.dll
     environment:
       ConnectionStrings__Papyr: Host=db;Database=papyr;Username=papyr;Password=${PAPYR_DB_PASSWORD:-papyr-dev-only}
+      PAPYR_API_DIAGNOSTICS: ${PAPYR_API_DIAGNOSTICS:-false}
       PAPYR_INITIAL_SETUP_TOKEN: ${PAPYR_INITIAL_SETUP_TOKEN:-}
       PAPYR_COOKIE_SECURE: ${PAPYR_COOKIE_SECURE:-false}
       PAPYR_CHANGE_RETENTION_DAYS: ${PAPYR_CHANGE_RETENTION_DAYS:-90}
