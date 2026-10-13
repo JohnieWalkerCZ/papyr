@@ -113,6 +113,26 @@ Compose passes the API database password separately as `PGPASSWORD`, which Npgsq
 
 Changing `PAPYR_DB_PASSWORD` does **not** change the role password in an already initialized PostgreSQL volume. PostgreSQL can pass the supplied `pg_isready` healthcheck while rejecting the API's password; startup migrations then fail before the API listens. Preserve the existing password, or have the host administrator perform a coordinated database password rotation. Do not delete the database volume to resolve a credential mismatch. An empty setup token only disables first setup; it does not prevent API startup or the setup-status GET.
 
+## Repair an existing database password mismatch in Portainer
+
+`DATABASE_AUTH_FAILED` means PostgreSQL rejected the API's credentials. If `PAPYR_DB_PASSWORD` was changed after the database volume was initialized, either restore the original stack value or explicitly update the stored database role password to the intended stack value. Redeploying containers alone does not change that stored password.
+
+To update the role without SSH or deleting data, open Portainer's **Containers**, select this stack's **db** container, then open **Console** with `/bin/sh` as the `postgres` operating-system user. With the supplied PostgreSQL image's default local authentication, connect over its local Unix socket:
+
+```sh
+psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
+
+At the `papyr=#` prompt, run:
+
+```text
+\password papyr
+```
+
+Enter the intended `PAPYR_DB_PASSWORD` from the stack settings at both password prompts. Input is hidden; `\password` avoids putting the plaintext password in SQL history or server statement logs. Exit with `\q`, then **restart the api container** to retry startup migrations. Click **Retry setup check** and verify `/health/ready` returns `200`. The role password changes, while notes, tables, attachments, and volumes remain intact. This repair was verified with a disposable PostgreSQL 17.6/API instance, including preservation of an existing database row.
+
+If local authentication has been hardened or the role/database names differ, the instance administrator must perform the password rotation with their existing administrative access. Do not enable network trust authentication or delete the volume. Once recovered, set `PAPYR_API_DIAGNOSTICS=false` and `PAPYR_API_START_CONDITION=service_healthy`; retain `PAPYR_COOKIE_SECURE=false` for the current HTTP instance and enable it when HTTPS is configured.
+
 ## Backups and restore
 
 Back up the database and asset volume as a pair. The scripts stop the API during the snapshot so attachments and metadata stay aligned:
