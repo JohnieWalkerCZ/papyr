@@ -16,7 +16,10 @@ export async function fetchWithDiagnostics(path: string, init: RequestInit = {})
   const startedAt = performance.now();
   console.info("[Papyr network] request started", details);
   try {
-    const response = await fetch(path, init);
+    const response = await fetch(path, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(path.includes("/assets") ? 60_000 : 15_000),
+    });
     const completed = { ...details, status: response.status, durationMs: Math.round(performance.now() - startedAt) };
     if (response.ok) console.info("[Papyr network] response received", completed);
     else console.warn("[Papyr network] HTTP error", completed);

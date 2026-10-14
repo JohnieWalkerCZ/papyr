@@ -31,7 +31,7 @@ async function createFolder(page: import("@playwright/test").Page, title: string
 async function localNoteContent(page: import("@playwright/test").Page, title: string) {
   return page.evaluate(async (noteTitle) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("papyr-local");
+      const request = indexedDB.open("papyr-anonymous");
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result);
     });
@@ -125,7 +125,7 @@ test("a remote revision arriving during an edit preserves both versions as a con
   await editor.fill("local draft");
   await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("papyr-local");
+      const request = indexedDB.open("papyr-anonymous");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -150,7 +150,7 @@ test("a remote revision arriving during an edit preserves both versions as a con
   await expect.poll(() => localNoteContent(page, "Revision guarded")).toBe("remote version");
   const conflictContent = await page.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("papyr-local");
+      const request = indexedDB.open("papyr-anonymous");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -182,8 +182,8 @@ test("a second tab cannot write the same note until the first tab releases its l
   await expect(secondEditor).toHaveAttribute("aria-readonly", "true");
   await expect(secondTab.locator(".document-editor > p.save-status")).toContainText("another tab");
 
-  await page.goto("/");
-  await secondTab.getByRole("button", { name: "Try editing" }).click();
+  await page.getByRole("link", { name: "Library", exact: true }).first().click();
+  // Normal navigation flushes and releases; a crashed tab instead waits for lease expiry.
   await expect(secondEditor).toHaveAttribute("aria-readonly", "false");
   await secondTab.close();
 });
@@ -218,7 +218,7 @@ test("new Markdown note and pending create survive offline reload", async ({ pag
     .poll(() =>
       page.evaluate(async (id) => {
         const database = await new Promise<IDBDatabase>((resolve, reject) => {
-          const request = indexedDB.open("papyr-local");
+          const request = indexedDB.open("papyr-anonymous");
           request.onerror = () => reject(request.error);
           request.onsuccess = () => resolve(request.result);
         });
@@ -236,7 +236,7 @@ test("new Markdown note and pending create survive offline reload", async ({ pag
   const counts = await page.evaluate(
     () =>
       new Promise<{ entities: number; outbox: number }>((resolve, reject) => {
-        const request = indexedDB.open("papyr-local");
+        const request = indexedDB.open("papyr-anonymous");
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const transaction = request.result.transaction(["entities", "outbox"]);

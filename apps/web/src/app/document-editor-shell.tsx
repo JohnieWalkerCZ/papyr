@@ -105,9 +105,19 @@ export function DocumentEditorShell({
         document.getElementById("document-search")?.focus();
       }
     };
+    const refreshLibrary = () => {
+      void Promise.all([listLocalFolders(), listLocalNotes()]).then(([allFolders, allNotes]) => {
+        setFolders(allFolders);
+        setNotes(allNotes);
+      });
+    };
+    window.addEventListener("papyr-library-changed", refreshLibrary);
+    window.addEventListener("focus", refreshLibrary);
     window.addEventListener("papyr-sync-state", onSync);
     window.addEventListener("keydown", onKey);
     return () => {
+      window.removeEventListener("papyr-library-changed", refreshLibrary);
+      window.removeEventListener("focus", refreshLibrary);
       window.removeEventListener("papyr-sync-state", onSync);
       window.removeEventListener("keydown", onKey);
     };

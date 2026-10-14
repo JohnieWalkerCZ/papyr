@@ -66,9 +66,9 @@ export function AuthPanel() {
         void syncLocalLibrary();
       })
       .catch(async (error: unknown) => {
-        await activateLocalAccount(null);
-        setUser(null);
         const unauthorized = error instanceof ApiError && error.status === 401;
+        if (unauthorized) await activateLocalAccount(null);
+        setUser(null);
         setStatus(unauthorized ? copy.loggedOut : copy.unavailable);
       });
     return () => window.removeEventListener("papyr-sync-state", onSyncState);

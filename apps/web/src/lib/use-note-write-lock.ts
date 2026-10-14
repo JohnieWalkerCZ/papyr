@@ -1,116 +1,174 @@
 "use client";
 
 import { createUuid } from "./uuid.js";
-import { localDb, type LocalSyncMeta } from "./local-db";
-import { useEffect, useState } from "react";
+import {
+  acquireLocalLease,
+  DraftRecoveredError,
+  localDb,
+  ownsLocalLease,
+  releaseLocalLease,
+  renewLocalLease,
+  transferLocalLease,
+  type LocalWriteLease,
+} from "./local-db";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export function useNoteWriteLock(noteId: string) {
-  const [attempt, setAttempt] = useState(0);
+export function useNoteWriteLock(noteId: string, flush: () => Promise<void>, reload: () => Promise<void>) {
+  const [database] = useState(() => localDb);
   const [state, setState] = useState<"acquiring" | "writer" | "locked" | "unsupported">("acquiring");
-  const [heldNoteId, setHeldNoteId] = useState<string | null>(null);
+  const lease = useRef<LocalWriteLease | undefined>(undefined);
+  const flushRef = useRef(flush);
+  const reloadRef = useRef(reload);
+  const requestHandoff = useRef<() => void>(() => {});
+  useEffect(() => {
+    flushRef.current = flush;
+    reloadRef.current = reload;
+  }, [flush, reload]);
 
   useEffect(() => {
     let active = true;
-    let release: (() => void) | undefined;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let profileId: string;
+    let relinquished = false;
+    let handingOff = false;
+    let acquiring = false;
+    let held = false;
+    let lastRenewed = 0;
+    let legacyKey: string | undefined;
     try {
-      profileId = localStorage.getItem("papyr-profile-id") ?? createUuid();
-      localStorage.setItem("papyr-profile-id", profileId);
+      const profileId = localStorage.getItem("papyr-profile-id");
+      if (profileId) legacyKey = `note:${profileId}:${noteId}`;
     } catch {
-      void Promise.resolve().then(() => active && setState("unsupported"));
-      return () => {
-        active = false;
-      };
+      /* IndexedDB ownership does not depend on preference storage. */
     }
-    if (!navigator.locks) {
-      const lockKey = `note:${profileId}:${noteId}`;
-      const lockOwner = createUuid();
-      void localDb
-        .transaction("rw", localDb.syncMeta, async () => {
-          const current = await localDb.syncMeta.get(lockKey);
-          if (current?.lockExpiresAt && current.lockExpiresAt > Date.now()) return false;
-          const lock: LocalSyncMeta = {
-            id: lockKey,
-            cursor: null,
-            bootstrapToken: null,
-            acceptedOperationIds: [],
-            lockOwner,
-            lockExpiresAt: Date.now() + 30_000,
-            updatedAt: Date.now(),
-          };
-          await localDb.syncMeta.put(lock);
-          return true;
-        })
-        .then((acquired) => {
+    const current = { id: `note:${noteId}`, owner: createUuid() };
+    const messages =
+      typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(`papyr-editor:${database.name}`) : undefined;
+
+    const acquire = async () => {
+      if (!active || relinquished || acquiring || held || database !== localDb) return;
+      acquiring = true;
+      try {
+        const acquired = await database.transaction("rw", database.syncMeta, async () => {
+          // Respect an older HTTP editor until its existing lease expires.
+          const legacy = legacyKey ? await database.syncMeta.get(legacyKey) : undefined;
+          if ((legacy?.lockExpiresAt ?? 0) > Date.now()) return false;
+          return (await ownsLocalLease(current, database)) || acquireLocalLease(current.id, current.owner, database);
+        });
+        if (acquired) {
           if (!active) {
-            if (acquired)
-              void localDb.transaction("rw", localDb.syncMeta, async () => {
-                if ((await localDb.syncMeta.get(lockKey))?.lockOwner === lockOwner)
-                  await localDb.syncMeta.delete(lockKey);
-              });
+            await releaseLocalLease(current, database);
             return;
           }
-          if (!acquired) {
-            setState("locked");
-            retryTimer = setTimeout(() => active && setAttempt((value) => value + 1), 750);
-            return;
+          lease.current = { ...current };
+          held = true;
+          lastRenewed = Date.now();
+          // Reload after obtaining the lease, before enabling inputs.
+          await reloadRef.current();
+          if (active && (await ownsLocalLease(current, database))) setState("writer");
+        } else setState("locked");
+      } catch {
+        if (held) {
+          held = false;
+          await releaseLocalLease(current, database);
+        }
+        if (active) setState("unsupported");
+      } finally {
+        acquiring = false;
+      }
+    };
+    const handoff = async (requester: string) => {
+      if (!held || handingOff) return;
+      handingOff = true;
+      relinquished = true;
+      setState("locked");
+      try {
+        // Freeze input first, then flush all editor types before releasing ownership.
+        await flushRef.current();
+        await transferLocalLease(current, requester, database);
+        held = false;
+        messages?.postMessage({ type: "EDITOR_RELEASED", id: noteId });
+      } catch {
+        relinquished = false;
+        if (active && (await ownsLocalLease(current, database))) setState("writer");
+      } finally {
+        handingOff = false;
+      }
+    };
+    if (messages)
+      messages.onmessage = (event) => {
+        if (event.data?.id !== noteId) return;
+        if (event.data.type === "EDITOR_REQUESTED" && typeof event.data.owner === "string")
+          void handoff(event.data.owner);
+        if (event.data.type === "EDITOR_RELEASED") void acquire();
+      };
+    requestHandoff.current = () => {
+      void (async () => {
+        try {
+          await flushRef.current();
+        } catch (error) {
+          if (!(error instanceof DraftRecoveredError)) return;
+        }
+        if (handingOff || acquiring) return;
+        current.owner = createUuid();
+        relinquished = false;
+        messages?.postMessage({ type: "EDITOR_REQUESTED", id: noteId, owner: current.owner });
+        void acquire();
+      })();
+    };
+    const onPageHide = () => {
+      relinquished = true;
+      if (!held) return;
+      void flushRef
+        .current()
+        .then(() => releaseLocalLease(current, database))
+        .then(() => {
+          held = false;
+        })
+        .catch(() => {});
+    };
+    const onPageShow = () => {
+      relinquished = false;
+      void acquire();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    void acquire();
+    const heartbeat = setInterval(() => {
+      if (!held) {
+        void acquire();
+        return;
+      }
+      if (Date.now() - lastRenewed < 10_000) return;
+      lastRenewed = Date.now();
+      void renewLocalLease(current, database)
+        .then((renewed) => {
+          if (!renewed || localDb !== database) {
+            held = false;
+            relinquished = true;
+            if (active) setState("locked");
+            void flushRef.current().catch(() => {});
           }
-          setHeldNoteId(noteId);
-          setState("writer");
-          const renew = () =>
-            void localDb
-              .transaction("rw", localDb.syncMeta, async () => {
-                const current = await localDb.syncMeta.get(lockKey);
-                if (current?.lockOwner === lockOwner)
-                  await localDb.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 30_000 });
-              })
-              .catch(() => active && setState("unsupported"));
-          const heartbeat = setInterval(renew, 10_000);
-          release = () => {
-            clearInterval(heartbeat);
-            void localDb.transaction("rw", localDb.syncMeta, async () => {
-              if ((await localDb.syncMeta.get(lockKey))?.lockOwner === lockOwner)
-                await localDb.syncMeta.delete(lockKey);
-            });
-          };
         })
         .catch(() => active && setState("unsupported"));
-      return () => {
-        active = false;
-        if (retryTimer) clearTimeout(retryTimer);
-        release?.();
-        setHeldNoteId((current) => (current === noteId ? null : current));
-      };
-    }
-    void navigator.locks
-      .request(`papyr-profile:${profileId}:note:${noteId}`, { mode: "exclusive", ifAvailable: true }, async (lock) => {
-        if (!active) return;
-        if (!lock) {
-          setState("locked");
-          retryTimer = setTimeout(() => active && setAttempt((value) => value + 1), 750);
-          return;
-        }
-        setHeldNoteId(noteId);
-        setState("writer");
-        await new Promise<void>((resolve) => (release = resolve));
-      })
-      .catch(() => active && setState("unsupported"));
+    }, 1000);
     return () => {
       active = false;
-      if (retryTimer) clearTimeout(retryTimer);
-      release?.();
-      setHeldNoteId((current) => (current === noteId ? null : current));
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      clearInterval(heartbeat);
+      messages?.close();
+      // Navigation flushes before ownership is released, including debounced drafts.
+      void flushRef
+        .current()
+        .then(() => releaseLocalLease(current, database))
+        .catch(() => {});
     };
-  }, [attempt, noteId]);
+  }, [database, noteId]);
 
-  const currentState = state === "writer" && heldNoteId !== noteId ? "acquiring" : state;
   return {
-    canWrite: currentState === "writer",
-    state: currentState,
-    retry: () => {
-      setState("acquiring");
-      setAttempt((value) => value + 1);
-    },
+    database,
+    canWrite: state === "writer",
+    state,
+    getLease: useCallback(() => lease.current, []),
+    retry: useCallback(() => requestHandoff.current(), []),
   };
 }

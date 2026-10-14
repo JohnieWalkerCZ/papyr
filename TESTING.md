@@ -61,3 +61,15 @@
 ## MVP release gate
 
 No high-severity auth/data-loss bugs, no blocked acceptance scenarios above, verified latest-schema DB migration, full PWA offline smoke, working tldraw production license, successful backup restore, understandable conflict recovery, and both desktop/tablet usable.
+
+## Browser coordination regressions
+
+After building the web app, run:
+
+```sh
+pnpm --filter @papyr/web exec playwright test e2e/multi-client.spec.ts e2e/sync-lock-retry.spec.ts --workers=1
+```
+
+These cover Markdown/Typst offline handoff, automatic recovery after closing a writer, a late mutation acknowledgment after lease replacement, and lease recovery both without Web Locks and with an unavailable browser lock. Unit tests additionally cover successor ownership, atomic recovery-copy rollback, and preserving a draft after the original note was purged.
+
+`e2e/multi-device-real.spec.ts` requires `PAPYR_TEST_API_ORIGIN` and `PAPYR_TEST_SETUP_TOKEN` for a **fresh disposable API/database and attachment directory**. It performs initial setup (which resets that test instance), forwards browser API requests to that origin, and checks real two-device synchronization, cached account-note reload while offline, and preservation of both conflict versions. SignalR transport is not asserted by this focused test; its existing separate cross-device suite covers notification delivery. Never point this test at a retained deployment.

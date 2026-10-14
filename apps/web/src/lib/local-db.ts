@@ -131,13 +131,28 @@ export function createLocalDb(name = "papyr-local") {
   return db;
 }
 
-export let localDb = createLocalDb("papyr-anonymous");
+function initialDatabaseName() {
+  if (typeof window === "undefined") return "papyr-anonymous";
+  try {
+    const account = localStorage.getItem("papyr-active-account");
+    return account && /^[0-9a-f-]{36}$/i.test(account) ? `papyr-account-${account}` : "papyr-anonymous";
+  } catch {
+    return "papyr-anonymous";
+  }
+}
+
+export let localDb = createLocalDb(initialDatabaseName());
 let databaseActivation = Promise.resolve();
 
 export function activateLocalAccount(accountId: string | null, migrateLegacy = false): Promise<void> {
   const name = accountId ? `papyr-account-${accountId}` : "papyr-anonymous";
+  try {
+    if (accountId) localStorage.setItem("papyr-active-account", accountId);
+    else localStorage.removeItem("papyr-active-account");
+  } catch {
+    /* The current session still works when preferences cannot be stored. */
+  }
   if (localDb.name === name) return databaseActivation;
-  localDb.close();
   localDb = createLocalDb(name);
   const destination = localDb;
   databaseActivation = (async () => {
@@ -388,6 +403,7 @@ async function queueInTransaction(
   if (create) await database.entities.add(entity);
   else await database.entities.put(entity);
   await database.outbox.add(operation);
+  notifyAfterCommit(database, entity.id);
 }
 
 export async function updateLocalNote(
@@ -395,22 +411,52 @@ export async function updateLocalNote(
   changes: Partial<Pick<LocalNote, "title" | "content">>,
   database = localDb,
   expectedRevision?: string | null,
+  lease?: LocalWriteLease,
+  original?: LocalNote,
 ) {
   if (changes.title !== undefined && !changes.title.trim()) throw new Error("A note title is required.");
   let conflict = false;
-  const next = await database.transaction("rw", database.entities, database.outbox, database.conflicts, async () => {
-    const note = (await database.entities.get(id)) as LocalNote | undefined;
-    if (!note || note.kind !== "note" || note.deletedAt) throw new Error("Note not found.");
-    if (expectedRevision !== undefined && note.revision !== expectedRevision) {
-      const local = { ...note, ...changes, revision: expectedRevision, updatedAt: Date.now() };
-      await database.conflicts.put({ id, local, remote: note, detectedAt: Date.now() });
-      conflict = true;
-      return local;
-    }
-    const updated = { ...note, ...changes, updatedAt: Date.now() };
-    await queueInTransaction(updated, "update", changes, database);
-    return updated;
-  });
+  let recovered = false;
+  const next = await database.transaction(
+    "rw",
+    database.entities,
+    database.outbox,
+    database.conflicts,
+    database.syncMeta,
+    async () => {
+      const current = (await database.entities.get(id)) as LocalNote | undefined;
+      const note = current ?? original;
+      if (!note || note.kind !== "note") throw new Error("Note not found.");
+      if (lease && (!current || current.deletedAt || !(await ownsLocalLease(lease, database)))) {
+        // A suspended editor must preserve its draft without replacing the successor's note.
+        const existing = await database.entities.get(lease.owner);
+        const copy = {
+          ...(original ?? note),
+          ...changes,
+          folderId: null,
+          id: lease.owner,
+          title: `${changes.title ?? note.title} (recovered draft)`,
+          revision: existing?.revision ?? null,
+          deletedAt: null,
+          updatedAt: Date.now(),
+        };
+        await queueInTransaction(copy, existing ? "update" : "create", existing ? changes : copy, database, !existing);
+        recovered = true;
+        return copy;
+      }
+      if (note.deletedAt) throw new Error("Note not found.");
+      if (expectedRevision !== undefined && note.revision !== expectedRevision) {
+        const local = { ...note, ...changes, revision: expectedRevision, updatedAt: Date.now() };
+        await database.conflicts.put({ id, local, remote: note, detectedAt: Date.now() });
+        conflict = true;
+        return local;
+      }
+      const updated = { ...note, ...changes, updatedAt: Date.now() };
+      await queueInTransaction(updated, "update", changes, database);
+      return updated;
+    },
+  );
+  if (recovered) throw new DraftRecoveredError();
   if (conflict) {
     if (typeof window !== "undefined")
       window.dispatchEvent(
@@ -435,7 +481,12 @@ export async function renameLocalEntity(id: string, title: string, database = lo
   });
 }
 
-export async function moveLocalEntity(id: string, destinationId: string | null, database = localDb) {
+export async function moveLocalEntity(
+  id: string,
+  destinationId: string | null,
+  database = localDb,
+  lease?: LocalWriteLease,
+) {
   const entity = await database.entities.get(id);
   if (!entity) throw new Error("Item not found.");
   if (entity.kind === "folder") {
@@ -449,7 +500,9 @@ export async function moveLocalEntity(id: string, destinationId: string | null, 
     }
   } else if (destinationId && (await database.entities.get(destinationId))?.kind !== "folder")
     throw new Error("Destination folder not found.");
-  return database.transaction("rw", database.entities, database.outbox, async () => {
+  return database.transaction("rw", database.entities, database.outbox, database.syncMeta, async () => {
+    if (lease && !(await ownsLocalLease(lease, database)))
+      throw new Error("Editing moved to another tab. Reopen the note before changing it.");
     const current = await database.entities.get(id);
     if (!current) throw new Error("Item not found.");
     const next =
@@ -466,8 +519,10 @@ export async function moveLocalEntity(id: string, destinationId: string | null, 
   });
 }
 
-export async function setDeletedLocalEntity(id: string, deleted: boolean, database = localDb) {
-  return database.transaction("rw", database.entities, database.outbox, async () => {
+export async function setDeletedLocalEntity(id: string, deleted: boolean, database = localDb, lease?: LocalWriteLease) {
+  return database.transaction("rw", database.entities, database.outbox, database.syncMeta, async () => {
+    if (lease && !(await ownsLocalLease(lease, database)))
+      throw new Error("Editing moved to another tab. Reopen the note before changing it.");
     const root = await database.entities.get(id);
     if (!root) throw new Error("Item not found.");
     if (Boolean(root.deletedAt) === deleted) return root;
@@ -506,20 +561,13 @@ export async function setDeletedLocalEntity(id: string, deleted: boolean, databa
         attempts: 0,
       });
     }
+    for (const entity of affected) notifyAfterCommit(database, entity.id);
     return { ...root, deletedAt, updatedAt: deletedAt ?? Date.now() } as LocalEntity;
   });
 }
 
 export async function releaseLocalSyncLock(lockOwner: string, database = localDb): Promise<boolean> {
-  return database.transaction("rw", database.syncMeta, async () => {
-    const current = await database.syncMeta.get("state");
-    if (current?.lockOwner !== lockOwner) return false;
-    const unlocked = { ...current };
-    delete unlocked.lockOwner;
-    delete unlocked.lockExpiresAt;
-    await database.syncMeta.put(unlocked);
-    return true;
-  });
+  return releaseLocalLease({ id: "state", owner: lockOwner }, database);
 }
 
 export async function repairRejectedUnsyncedOperation(operationId: string, database = localDb): Promise<boolean> {
@@ -612,6 +660,80 @@ export async function clearLocalTrash(database = localDb) {
       });
     }
     await database.entities.bulkDelete(ids);
+    for (const id of ids) notifyAfterCommit(database, id);
     return trash.length;
+  });
+}
+
+export interface LocalWriteLease {
+  id: string;
+  owner: string;
+}
+
+export async function ownsLocalLease(lease: LocalWriteLease, database = localDb): Promise<boolean> {
+  const current = await database.syncMeta.get(lease.id);
+  return current?.lockOwner === lease.owner && (current.lockExpiresAt ?? 0) > Date.now();
+}
+
+export async function acquireLocalLease(id: string, owner: string, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.syncMeta, async () => {
+    const current = await database.syncMeta.get(id);
+    if (current?.lockExpiresAt && current.lockExpiresAt > Date.now()) return false;
+    await database.syncMeta.put({
+      id,
+      cursor: null,
+      bootstrapToken: null,
+      acceptedOperationIds: [],
+      ...current,
+      lockOwner: owner,
+      lockExpiresAt: Date.now() + 30_000,
+      updatedAt: Date.now(),
+    });
+    return true;
+  });
+}
+
+export async function renewLocalLease(lease: LocalWriteLease, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.syncMeta, async () => {
+    if (!(await ownsLocalLease(lease, database))) return false;
+    const current = (await database.syncMeta.get(lease.id))!;
+    await database.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 30_000 });
+    return true;
+  });
+}
+
+export async function releaseLocalLease(lease: LocalWriteLease, database = localDb) {
+  return database.transaction("rw", database.syncMeta, async () => {
+    const current = await database.syncMeta.get(lease.id);
+    if (current?.lockOwner !== lease.owner) return false;
+    const unlocked = { ...current };
+    delete unlocked.lockOwner;
+    delete unlocked.lockExpiresAt;
+    await database.syncMeta.put(unlocked);
+    return true;
+  });
+}
+
+export class DraftRecoveredError extends Error {
+  constructor() {
+    super("Editing moved to another tab. Your draft was saved as a recovered copy in the library.");
+  }
+}
+
+function notifyAfterCommit(database: typeof localDb, id: string) {
+  let transaction = Dexie.currentTransaction;
+  while (transaction?.parent) transaction = transaction.parent;
+  transaction?.on("complete", () => {
+    if (typeof window !== "undefined")
+      window.dispatchEvent(new CustomEvent("papyr-local-commit", { detail: { database: database.name, id } }));
+  });
+}
+
+export async function transferLocalLease(lease: LocalWriteLease, owner: string, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.syncMeta, async () => {
+    if (!(await ownsLocalLease(lease, database))) return false;
+    const current = (await database.syncMeta.get(lease.id))!;
+    await database.syncMeta.put({ ...current, lockOwner: owner, lockExpiresAt: Date.now() + 30_000 });
+    return true;
   });
 }

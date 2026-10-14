@@ -1,5 +1,13 @@
 # DECISIONS.md — architecture decision log
 
+### Multiple clients — bounded sync passes and safe editor handoff (2026-10-14)
+
+- User approved immediately usable local tabs, shared-browser sync coordination, same-note handoff, and independent device sync with explicit conflicts. Reject a server-wide barrier waiting for all clients: offline/suspended clients cannot reliably acknowledge it.
+- Use account-scoped Web Locks plus fenced IndexedDB leases (30-second expiry, 10-second renewal). Capture account/database/epoch; check ownership inside every sync write transaction. Yield between durable operations/pages after ten seconds and bound network requests. Preserve legacy lease expiry and operation IDs after unknown outcomes.
+- Broadcast metadata-only hints after local commit. A same-note handoff freezes input, flushes each editor type, atomically reserves ownership for the requester, and reloads the saved snapshot before enabling editing. Expired-owner saves become separate recovery notes. No new package, schema, server presence registry, global lock, or collaborative editor protocol.
+- Persist only the last account ID as a browser cache hint so signed-in notes survive offline reload. Remount editors on account activation and keep their databases captured; a network outage does not switch to anonymous storage. Explicit sign-out/401 still does.
+- Add an optional `X-Papyr-Account` API guard to reject cookie/account changes between tabs. It limits access to the already-authenticated account; it never selects another account or replaces authorization/CSRF. Deploy both images and reload legacy tabs; no storage purge or destructive migration is needed.
+
 ### Sync lock recovery — deferred fallback attempts (2026-10-14)
 
 - Logs confirmed authenticated, online sync attempts stopped at an unexpired IndexedDB lease and returned idle without scheduling another attempt. Add a localized `waiting` state and automatic retries within five seconds, respecting active lease expiry. Preserve the existing lease duration and ownership checks rather than stealing locks or clearing browser storage.

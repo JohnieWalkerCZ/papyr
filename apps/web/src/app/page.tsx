@@ -147,11 +147,13 @@ export default function Home() {
     window.addEventListener("papyr-sync-state", onSyncState);
     const onAccountChange = () => void refresh();
     window.addEventListener("papyr-account-change", onAccountChange);
+    window.addEventListener("papyr-library-changed", onAccountChange);
     window.addEventListener("keydown", onShortcut);
     queueMicrotask(() => {
       void refresh()
         .then(async () => {
-          setStatus((await localDb.outbox.count()) ? copy.pendingSync : copy.savedLocal);
+          const initialStatus = (await localDb.outbox.count()) ? copy.pendingSync : copy.savedLocal;
+          setStatus((current) => (current === copy.loading ? initialStatus : current));
           if (new URLSearchParams(window.location.search).get("view") === "conflicts") openConflictCenter();
         })
         .catch(() => setStatus(copy.loadingError));
@@ -159,6 +161,7 @@ export default function Home() {
     return () => {
       window.removeEventListener("papyr-sync-state", onSyncState);
       window.removeEventListener("papyr-account-change", onAccountChange);
+      window.removeEventListener("papyr-library-changed", onAccountChange);
       window.removeEventListener("keydown", onShortcut);
     };
   }, [copy]);

@@ -29,6 +29,8 @@ If no server is configured or reachable, continue using Papyr locally. Those not
 
 Papyr saves edits to the browser before reporting them as saved locally. Sync runs in the background when signed in; the status area distinguishes local saves, pending sync, syncing, offline, and errors. **Sync now** requests an immediate attempt. Previously loaded local notes remain usable offline.
 
+Multiple tabs share the local library and coordinate background sync. The same note opens read-only in additional tabs; choose **Continue editing here** to save the current writer’s draft and move editing to this tab. Other notes and devices remain usable while sync runs. An abandoned editor lease expires after about 30 seconds.
+
 If the same note changes independently on two devices, Papyr pauses that note and opens the Conflict Center. Review the versions and choose whether to keep the server version, save the local version as a separate note, or explicitly overwrite the server version. Do not clear browser storage while it has unsynced edits.
 
 ## Run Papyr locally

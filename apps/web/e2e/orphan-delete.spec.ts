@@ -95,6 +95,6 @@ test("a rejected unsynced delete repairs its missing create and preserves Trash 
   await expect.poll(() => actions).toEqual(["delete", "create", "delete"]);
   await expect(page.locator(".sync-indicator")).toContainText("Synced to server");
   await page.reload();
-  await page.getByRole("button", { name: "Trash", exact: true }).click();
+  await page.getByRole("button", { name: /^Trash(?: \d+)?$/ }).click();
   await expect(page.getByText("Preserved Trash note", { exact: true })).toBeVisible();
 });

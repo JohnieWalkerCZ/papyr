@@ -7,7 +7,14 @@ import { getAssetUrls } from "@tldraw/assets/selfHosted";
 import { Tldraw, exportAs, getSnapshot, loadSnapshot } from "tldraw";
 import type { Editor, TLAssetStore, TLStoreSnapshot } from "tldraw";
 import "tldraw/tldraw.css";
-import { localDb, storeLocalAttachment, updateLocalNote } from "@/lib/local-db";
+import {
+  DraftRecoveredError,
+  localDb,
+  storeLocalAttachment,
+  updateLocalNote,
+  type LocalWriteLease,
+  type LocalNote,
+} from "@/lib/local-db";
 import { useLocale } from "@/lib/locale";
 import { scheduleSync } from "@/lib/sync";
 
@@ -15,11 +22,19 @@ const tldrawAssetUrls = getAssetUrls({ baseUrl: "/tldraw" });
 
 export default function WhiteboardProof({
   noteId,
+  database = localDb,
+  getWriteLease,
+  originalNote,
+  onFlushReady,
   revision,
   canWrite = true,
   onDirtyChange,
 }: {
   noteId?: string;
+  database?: typeof localDb;
+  getWriteLease?: () => LocalWriteLease | undefined;
+  originalNote?: LocalNote;
+  onFlushReady?: (flush: (() => Promise<void>) | undefined) => void;
   revision?: string | null;
   canWrite?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
@@ -41,15 +56,17 @@ export default function WhiteboardProof({
   const [fullscreen, setFullscreen] = useState(false);
   const canWriteRef = useRef(canWrite);
   const revisionRef = useRef(revision);
+  const originalNoteRef = useRef(originalNote);
   useLayoutEffect(() => {
     canWriteRef.current = canWrite;
     revisionRef.current = revision;
-  }, [canWrite, revision]);
+    originalNoteRef.current = originalNote;
+  }, [canWrite, revision, originalNote]);
   const licenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
   const assetStore = useMemo<TLAssetStore>(
     () => ({
       async upload(_asset, file) {
-        const saved = await storeLocalAttachment(file);
+        const saved = await storeLocalAttachment(file, database);
         return { src: `https://papyr.invalid/papyr-assets/${saved.id}` };
       },
       async resolve(asset) {
@@ -60,20 +77,20 @@ export default function WhiteboardProof({
         if (!reference) return null;
         const cached = assetUrls.current.get(reference[1]);
         if (cached) return cached;
-        const saved = await localDb.assets.get(reference[1]);
+        const saved = await database.assets.get(reference[1]);
         if (!saved) return null;
         const url = URL.createObjectURL(saved.blob);
         assetUrls.current.set(reference[1], url);
         return url;
       },
     }),
-    [],
+    [database],
   );
 
   useEffect(() => {
     void Promise.all([
-      noteId ? localDb.entities.get(noteId) : localDb.snapshots.get("phase-zero-whiteboard"),
-      localDb.snapshots.get(`whiteboard-session:${noteId ?? "phase-zero"}`),
+      noteId ? database.entities.get(noteId) : database.snapshots.get("phase-zero-whiteboard"),
+      database.snapshots.get(`whiteboard-session:${noteId ?? "phase-zero"}`),
     ])
       .then(([saved, session]) => {
         const value = noteId
@@ -92,7 +109,7 @@ export default function WhiteboardProof({
         setStatus(copy.loadError);
         setReady(true);
       });
-  }, [copy.loadError, copy.loading, loadAttempt, noteId]);
+  }, [database, copy.loadError, copy.loading, loadAttempt, noteId]);
 
   useEffect(() => {
     editor?.user.updateUserPreferences({ colorScheme: "system" });
@@ -133,22 +150,38 @@ export default function WhiteboardProof({
       try {
         const fullSnapshot = value as { document?: unknown; session?: unknown };
         const document = fullSnapshot.document ?? value;
-        if (noteId) await updateLocalNote(noteId, { content: document }, undefined, revisionRef.current);
-        else await localDb.snapshots.put({ id: "phase-zero-whiteboard", value: document, updatedAt: Date.now() });
+        if (noteId)
+          await updateLocalNote(
+            noteId,
+            { content: document },
+            database,
+            revisionRef.current,
+            getWriteLease?.(),
+            originalNoteRef.current,
+          );
+        else await database.snapshots.put({ id: "phase-zero-whiteboard", value: document, updatedAt: Date.now() });
         if (fullSnapshot.session)
-          await localDb.snapshots.put({
+          await database.snapshots.put({
             id: `whiteboard-session:${noteId ?? "phase-zero"}`,
             value: fullSnapshot.session,
             updatedAt: Date.now(),
           });
         if (noteId) scheduleSync();
-        if (latestSnapshot.current === value) onDirtyChange?.(false);
+        if (latestSnapshot.current === value) {
+          latestSnapshot.current = undefined;
+          onDirtyChange?.(false);
+        }
         setStatus(copy.saved);
-      } catch {
-        setStatus(copy.saveError);
+      } catch (error) {
+        if (error instanceof DraftRecoveredError) {
+          latestSnapshot.current = undefined;
+          onDirtyChange?.(false);
+        }
+        setStatus(error instanceof DraftRecoveredError ? error.message : copy.saveError);
+        throw error;
       }
     },
-    [copy.saveError, copy.saved, noteId, onDirtyChange],
+    [database, getWriteLease, copy.saveError, copy.saved, noteId, onDirtyChange],
   );
 
   useEffect(() => {
@@ -161,7 +194,7 @@ export default function WhiteboardProof({
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
           saveTimer.current = null;
-          void persist(latestSnapshot.current);
+          void persist(latestSnapshot.current).catch(() => {});
         }, 500);
       },
       { scope: "document", source: "user" },
@@ -169,9 +202,18 @@ export default function WhiteboardProof({
     return () => {
       stopListening();
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (latestSnapshot.current) void persist(latestSnapshot.current);
+      if (latestSnapshot.current) void persist(latestSnapshot.current).catch(() => {});
     };
   }, [editor, onDirtyChange, persist]);
+
+  useEffect(() => {
+    onFlushReady?.(async () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      if (latestSnapshot.current) await persist(latestSnapshot.current);
+    });
+    return () => onFlushReady?.(undefined);
+  }, [onFlushReady, persist]);
 
   const save = useCallback(async () => {
     if (!editor || !canWriteRef.current) return;

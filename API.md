@@ -128,3 +128,7 @@ Authenticated SignalR hub `/hubs/changes` emits the owner-scoped `invalidate` ev
 ## Contract validation
 
 Generate or validate TypeScript types from backend OpenAPI; keep unit/contract tests for request/response schemas. No client path should post a mutation outside the defined idempotent endpoint.
+
+## Browser account guard
+
+Sync clients send optional `X-Papyr-Account: <authenticated-account-uuid>` on bootstrap, changes, mutations, entity fetches, and attachment requests. After authentication, the API compares it with the session's account ID. A mismatch (including an expired session) returns `409` with `error.code: "ACCOUNT_CHANGED"` before endpoint execution. The client stops syncing and rechecks authentication; pending local data remains intact. This header only constrains the authenticated identity and cannot grant access. Requests without it retain existing behavior for compatibility. CSRF and normal authorization still apply.

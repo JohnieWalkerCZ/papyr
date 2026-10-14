@@ -117,6 +117,20 @@ public sealed class AuthEndpointsTests
             Assert.Equal(HttpStatusCode.OK, me.StatusCode);
             Assert.Equal("owner", (await me.Content.ReadFromJsonAsync<IdentityResponse>())?.Username);
 
+            using (var wrongAccountRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/me"))
+            {
+                wrongAccountRequest.Headers.Add("X-Papyr-Account", Guid.NewGuid().ToString());
+                using var wrongAccount = await client.SendAsync(wrongAccountRequest);
+                Assert.Equal(HttpStatusCode.Conflict, wrongAccount.StatusCode);
+                Assert.Contains("ACCOUNT_CHANGED", await wrongAccount.Content.ReadAsStringAsync());
+            }
+            using (var matchingAccountRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/me"))
+            {
+                matchingAccountRequest.Headers.Add("X-Papyr-Account", identity!.Id!.Value.ToString());
+                using var matchingAccount = await client.SendAsync(matchingAccountRequest);
+                Assert.Equal(HttpStatusCode.OK, matchingAccount.StatusCode);
+            }
+
             using var missingCsrf = await client.PostAsJsonAsync("/api/v1/auth/logout", new { });
             Assert.Equal(HttpStatusCode.BadRequest, missingCsrf.StatusCode);
 

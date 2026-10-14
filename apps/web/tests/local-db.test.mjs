@@ -415,3 +415,83 @@ test("failed conflict preservation leaves the original entity, outbox, and confl
   db.close();
   await Dexie.delete(db.name);
 });
+
+test("expired leases cannot renew or release a successor, and stale editor drafts become independent copies", async () => {
+  const { acquireLocalLease, renewLocalLease, releaseLocalLease, ownsLocalLease, DraftRecoveredError } =
+    await import("../src/lib/local-db.ts");
+  const db = createLocalDb(`fenced-editor-${crypto.randomUUID()}`);
+  const note = await createMarkdownNote("Shared note", db);
+  const oldLease = { id: `note:${note.id}`, owner: crypto.randomUUID() };
+  const newLease = { id: oldLease.id, owner: crypto.randomUUID() };
+  assert.equal(await acquireLocalLease(oldLease.id, oldLease.owner, db), true);
+  assert.equal(await acquireLocalLease(newLease.id, newLease.owner, db), false);
+  await updateLocalNote(note.id, { content: "first" }, db, null, oldLease);
+  await db.syncMeta.update(oldLease.id, { lockExpiresAt: Date.now() - 1 });
+  assert.equal(await renewLocalLease(oldLease, db), false);
+  assert.equal(await acquireLocalLease(newLease.id, newLease.owner, db), true);
+  await updateLocalNote(note.id, { content: "successor" }, db, null, newLease);
+  assert.equal(await renewLocalLease(oldLease, db), false);
+  assert.equal(await releaseLocalLease(oldLease, db), false);
+  await assert.rejects(moveLocalEntity(note.id, null, db, oldLease), /Editing moved/);
+  await assert.rejects(setDeletedLocalEntity(note.id, true, db, oldLease), /Editing moved/);
+  await assert.rejects(
+    updateLocalNote(note.id, { content: "paused editor draft" }, db, null, oldLease),
+    DraftRecoveredError,
+  );
+  assert.equal((await db.entities.get(note.id)).content, "successor");
+  const recovery = await db.entities.get(oldLease.owner);
+  assert.equal(recovery.content, "paused editor draft");
+  assert.equal(recovery.revision, null);
+  assert.equal((await db.outbox.where("entityId").equals(recovery.id).first()).action, "create");
+  assert.equal(await ownsLocalLease(newLease, db), true);
+  await db.delete();
+});
+
+test("failed recovery copy rolls back without touching either draft or the successor lease", async () => {
+  const { acquireLocalLease } = await import("../src/lib/local-db.ts");
+  const db = createLocalDb(`fenced-rollback-${crypto.randomUUID()}`);
+  const note = await createMarkdownNote("Keep original", db);
+  const lease = { id: `note:${note.id}`, owner: crypto.randomUUID() };
+  await acquireLocalLease(lease.id, "successor", db);
+  const before = await db.outbox.count();
+  const stop = () => {
+    throw new Error("quota");
+  };
+  db.outbox.hook("creating", stop);
+  await assert.rejects(updateLocalNote(note.id, { content: "unsaved draft" }, db, null, lease), /quota/);
+  db.outbox.hook("creating").unsubscribe(stop);
+  assert.deepEqual(await db.entities.get(note.id), note);
+  assert.equal(await db.entities.get(lease.owner), undefined);
+  assert.equal(await db.outbox.count(), before);
+  assert.equal((await db.syncMeta.get(lease.id)).lockOwner, "successor");
+  await db.delete();
+});
+
+test("editor handoff reserves ownership for the requesting tab and preserves lease metadata", async () => {
+  const { acquireLocalLease, transferLocalLease, ownsLocalLease } = await import("../src/lib/local-db.ts");
+  const db = createLocalDb(`handoff-${crypto.randomUUID()}`);
+  const lease = { id: "note:handoff", owner: "writer" };
+  await acquireLocalLease(lease.id, lease.owner, db);
+  assert.equal(await transferLocalLease(lease, "requester", db), true);
+  assert.equal(await transferLocalLease(lease, "third-tab", db), false);
+  assert.equal(await acquireLocalLease(lease.id, "third-tab", db), false);
+  assert.equal(await ownsLocalLease({ id: lease.id, owner: "requester" }, db), true);
+  await db.delete();
+});
+
+test("a resumed editor preserves its original snapshot even after the shared note was purged", async () => {
+  const { DraftRecoveredError } = await import("../src/lib/local-db.ts");
+  const db = createLocalDb(`purged-editor-${crypto.randomUUID()}`);
+  const note = await createMarkdownNote("Deleted elsewhere", db);
+  const lease = { id: `note:${note.id}`, owner: crypto.randomUUID() };
+  await db.entities.delete(note.id);
+  await assert.rejects(
+    updateLocalNote(note.id, { content: "still in the editor" }, db, null, lease, note),
+    DraftRecoveredError,
+  );
+  const recovered = await db.entities.get(lease.owner);
+  assert.equal(recovered.content, "still in the editor");
+  assert.equal(recovered.folderId, null);
+  assert.equal(await db.entities.get(note.id), undefined);
+  await db.delete();
+});

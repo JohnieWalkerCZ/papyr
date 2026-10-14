@@ -96,85 +96,103 @@ async function apiError(response: Response) {
   return error;
 }
 
-export const api = {
-  setupStatus() {
-    return request<{ complete: boolean }>("/auth/setup-status");
-  },
-  async me() {
-    return request<SessionUser>("/auth/me");
-  },
-  login(username: string, password: string) {
-    return request<SessionUser>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
-  },
-  setup(username: string, password: string, setupToken: string, confirmReset: boolean) {
-    return request<SessionUser>("/setup", {
-      method: "POST",
-      headers: { "X-Papyr-Setup-Token": setupToken },
-      body: JSON.stringify({ username, password, confirmReset }),
-    });
-  },
-  createAccount(username: string, password: string) {
-    return request<SessionUser>("/auth/accounts", { method: "POST", body: JSON.stringify({ username, password }) });
-  },
-  logout() {
-    return request<void>("/auth/logout", { method: "POST", body: "{}" });
-  },
-  mutations(operations: unknown[]) {
-    return request<{ results: MutationReceipt[] }>("/mutations", {
-      method: "POST",
-      body: JSON.stringify({ operations }),
-    });
-  },
-  bootstrap(cursorToken?: string | null) {
-    const query = new URLSearchParams({ limit: "200" });
-    if (cursorToken) query.set("cursorToken", cursorToken);
-    return request<{
-      folders: ServerEntity[];
-      notes: ServerEntity[];
-      cursor?: string | null;
-      nextCursorToken?: string | null;
-    }>(`/bootstrap?${query}`);
-  },
-  changes(cursor: string) {
-    const query = new URLSearchParams({ cursor, limit: "200" });
-    return request<{ changes: ServerChange[]; nextCursor: string; hasMore: boolean }>(`/changes?${query}`);
-  },
-  entity(kind: "folder" | "note", id: string) {
-    return request<ServerEntity>(`/${kind}s/${id}`);
-  },
-  async uploadAsset(asset: { id: string; blob: Blob; mimeType: string; sha256: string }) {
-    const headers = new Headers({
-      "X-CSRF-TOKEN": await csrfToken(),
-      "X-Asset-Id": asset.id,
-      "X-Content-SHA256": asset.sha256,
-    });
-    const body = new FormData();
-    body.append("file", asset.blob, "attachment");
-    const response = await fetchWithDiagnostics("/api/v1/assets", {
-      method: "POST",
-      headers,
-      body,
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    if (!response.ok) throw await apiError(response);
-    return (await response.json()) as {
-      id: string;
-      sha256: string;
-      mimeType: string;
-      byteLength: number;
-      status: "stored" | "duplicate";
-    };
-  },
-  async downloadAsset(id: string) {
-    const response = await fetchWithDiagnostics(`/api/v1/assets/${id}`, {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-    if (!response.ok) throw await apiError(response);
-    const sha256 = response.headers.get("X-Content-SHA256");
-    if (!sha256 || !/^[0-9a-f]{64}$/i.test(sha256))
-      throw new Error("The attachment server omitted its integrity hash.");
-    return { blob: await response.blob(), sha256: sha256.toLowerCase() };
-  },
-};
+export function createApi(accountId?: string) {
+  const accountHeaders: Record<string, string> = accountId ? { "X-Papyr-Account": accountId } : {};
+  const scopedRequest = <T>(path: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers);
+    for (const [key, value] of Object.entries(accountHeaders)) headers.set(key, value);
+    return request<T>(path, { ...init, headers });
+  };
+  return {
+    setupStatus() {
+      return scopedRequest<{ complete: boolean }>("/auth/setup-status");
+    },
+    async me() {
+      return scopedRequest<SessionUser>("/auth/me");
+    },
+    login(username: string, password: string) {
+      return scopedRequest<SessionUser>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+    },
+    setup(username: string, password: string, setupToken: string, confirmReset: boolean) {
+      return scopedRequest<SessionUser>("/setup", {
+        method: "POST",
+        headers: { "X-Papyr-Setup-Token": setupToken },
+        body: JSON.stringify({ username, password, confirmReset }),
+      });
+    },
+    createAccount(username: string, password: string) {
+      return scopedRequest<SessionUser>("/auth/accounts", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+    },
+    logout() {
+      return scopedRequest<void>("/auth/logout", { method: "POST", body: "{}" });
+    },
+    mutations(operations: unknown[]) {
+      return scopedRequest<{ results: MutationReceipt[] }>("/mutations", {
+        method: "POST",
+        body: JSON.stringify({ operations }),
+      });
+    },
+    bootstrap(cursorToken?: string | null) {
+      const query = new URLSearchParams({ limit: "200" });
+      if (cursorToken) query.set("cursorToken", cursorToken);
+      return scopedRequest<{
+        folders: ServerEntity[];
+        notes: ServerEntity[];
+        cursor?: string | null;
+        nextCursorToken?: string | null;
+      }>(`/bootstrap?${query}`);
+    },
+    changes(cursor: string) {
+      const query = new URLSearchParams({ cursor, limit: "200" });
+      return scopedRequest<{ changes: ServerChange[]; nextCursor: string; hasMore: boolean }>(`/changes?${query}`);
+    },
+    entity(kind: "folder" | "note", id: string) {
+      return scopedRequest<ServerEntity>(`/${kind}s/${id}`);
+    },
+    async uploadAsset(asset: { id: string; blob: Blob; mimeType: string; sha256: string }) {
+      const headers = new Headers({
+        "X-CSRF-TOKEN": await csrfToken(),
+        ...accountHeaders,
+        "X-Asset-Id": asset.id,
+        "X-Content-SHA256": asset.sha256,
+      });
+      const body = new FormData();
+      body.append("file", asset.blob, "attachment");
+      const response = await fetchWithDiagnostics("/api/v1/assets", {
+        method: "POST",
+        headers,
+        body,
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw await apiError(response);
+      return (await response.json()) as {
+        id: string;
+        sha256: string;
+        mimeType: string;
+        byteLength: number;
+        status: "stored" | "duplicate";
+      };
+    },
+    async downloadAsset(id: string) {
+      const response = await fetchWithDiagnostics(`/api/v1/assets/${id}`, {
+        headers: accountHeaders,
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw await apiError(response);
+      const sha256 = response.headers.get("X-Content-SHA256");
+      if (!sha256 || !/^[0-9a-f]{64}$/i.test(sha256))
+        throw new Error("The attachment server omitted its integrity hash.");
+      return { blob: await response.blob(), sha256: sha256.toLowerCase() };
+    },
+  };
+}
+
+export const api = createApi();

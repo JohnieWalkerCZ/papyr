@@ -34,7 +34,7 @@ Follow these phases in order. Build one vertical slice at a time and complete it
 - [x] Implement API bootstrap/changes/mutations with optimistic concurrency and idempotency.
 - [ ] Implement frontend pull/apply/outbox/retry/backoff and content generation ACK logic. (Pull/apply/outbox, ACK, bounded transient retries, and one safe bootstrap-cursor rebase are implemented; pending-edit expiration E2E coverage is still missing.)
 - [x] Add conflict UI with keep remote, local copy, explicit overwrite.
-- [x] Add multi-tab coordinator and notification-only SignalR. (Web Locks/IndexedDB sync coordination, same-note single-writer locks with a read-only retry flow, and owner-scoped SignalR invalidation are implemented and browser-tested.)
+- [x] Add multi-tab coordinator and notification-only SignalR. (Account-scoped bounded sync passes, transaction-fenced IndexedDB leases, metadata-only tab notifications, save-before-transfer editor handoff, and owner-scoped SignalR invalidation are implemented. Browser coverage includes offline handoff, abandoned leases, and late mutation receipts.)
 - [x] Integrate sync status, startup, idle, note switch, background, reconnect triggers. (Startup/session, idle, foreground, reconnect, note-switch, background/pagehide best-effort, and manual triggers are present.)
 - [ ] Test concurrent writes, lost ACK, expired cursor rebase, remote tombstones. (PostgreSQL integration covers duplicate receipts, stale-write conflict, and expired cursors; pending-edit cursor rebase and remote tombstone browser coverage remain.)
 

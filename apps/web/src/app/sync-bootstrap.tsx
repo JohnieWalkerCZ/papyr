@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { api } from "@/lib/api-client";
+import { ApiError, api } from "@/lib/api-client";
 import { activateLocalAccount } from "@/lib/local-db";
 import { initializeSyncTriggers, setSyncAuthenticated, syncLocalLibrary } from "@/lib/sync";
 
@@ -15,7 +15,12 @@ export function SyncBootstrap() {
         setSyncAuthenticated(true);
         void syncLocalLibrary();
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) {
+          setSyncAuthenticated(false);
+          void activateLocalAccount(null);
+        }
+      });
   }, []);
 
   return null;

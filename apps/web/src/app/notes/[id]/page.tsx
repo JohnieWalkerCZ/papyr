@@ -15,10 +15,11 @@ import {
   Sigma,
 } from "lucide-react";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  listLocalFolders,
+  DraftRecoveredError,
   localDb,
+  listLocalFolders,
   moveLocalEntity,
   setDeletedLocalEntity,
   storeLocalAttachment,
@@ -38,14 +39,37 @@ import type { EditorView } from "codemirror";
 export default function NotePage({ noteId }: { noteId?: string } = {}) {
   const params = useParams<{ id: string }>();
   const id = noteId ?? params.id;
-  return <NoteEditor key={id} id={id} />;
+  const databaseName = useSyncExternalStore(
+    subscribeAccount,
+    () => localDb.name,
+    () => "papyr-anonymous",
+  );
+  return <NoteEditor key={`${databaseName}:${id}`} id={id} />;
+}
+
+function subscribeAccount(changed: () => void) {
+  window.addEventListener("papyr-account-change", changed);
+  return () => window.removeEventListener("papyr-account-change", changed);
 }
 
 function NoteEditor({ id }: { id: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const locale = useLocale();
-  const writer = useNoteWriteLock(id);
+  const flushDraft = useRef<() => Promise<void>>(async () => {});
+  const reloadDraft = useRef<() => Promise<void>>(async () => {});
+  const flushWhiteboard = useRef<(() => Promise<void>) | undefined>(undefined);
+  const registerWhiteboardFlush = useCallback((flush: (() => Promise<void>) | undefined) => {
+    flushWhiteboard.current = flush;
+  }, []);
+  const writer = useNoteWriteLock(
+    id,
+    () => flushDraft.current(),
+    () => reloadDraft.current(),
+  );
+  const database = writer.database;
+  const getWriteLease = writer.getLease;
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [note, setNote] = useState<LocalNote | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<LocalFolder[]>([]);
   const [source, setSource] = useState("");
@@ -61,6 +85,7 @@ function NoteEditor({ id }: { id: string }) {
   const sourceRef = useRef(source);
   const persistedSource = useRef(source);
   const noteRef = useRef(note);
+  const persistedTitle = useRef("");
   const whiteboardDirty = useRef(false);
   const onWhiteboardDirtyChange = useCallback((dirty: boolean) => {
     whiteboardDirty.current = dirty;
@@ -75,22 +100,26 @@ function NoteEditor({ id }: { id: string }) {
     if (moving) moveDialog.current?.showModal();
   }, [moving]);
   useEffect(() => {
-    void listLocalFolders().then(setFolders);
-  }, [id]);
+    void listLocalFolders(database).then(setFolders);
+  }, [database, id]);
 
   useEffect(() => {
     const onEntityUpdated = (event: Event) => {
       if ((event as CustomEvent<{ id: string }>).detail.id !== id) return;
-      void localDb.entities.get(id).then((entity) => {
+      void database.entities.get(id).then((entity) => {
         if (!entity || entity.kind !== "note" || entity.deletedAt) return;
         const current = noteRef.current;
         if (
           !current ||
+          current.title !== persistedTitle.current ||
           (sourceRef.current !== persistedSource.current && current.type !== "whiteboard") ||
           whiteboardDirty.current
         )
           return;
+        if (entity.type === "whiteboard" && !writer.canWrite && entity.updatedAt !== current.updatedAt)
+          setEditorGeneration((value) => value + 1);
         setNote(entity);
+        persistedTitle.current = entity.title;
         if (entity.type !== "whiteboard") {
           const content = String(entity.content ?? "");
           sourceRef.current = content;
@@ -99,13 +128,18 @@ function NoteEditor({ id }: { id: string }) {
         }
       });
     };
+    const refreshOnFocus = () => onEntityUpdated(new CustomEvent("papyr-entity-updated", { detail: { id } }));
     window.addEventListener("papyr-entity-updated", onEntityUpdated);
-    return () => window.removeEventListener("papyr-entity-updated", onEntityUpdated);
-  }, [id]);
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      window.removeEventListener("papyr-entity-updated", onEntityUpdated);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [database, id, writer.canWrite]);
 
   useEffect(() => {
     let active = true;
-    localDb.entities
+    database.entities
       .get(id)
       .then(async (entity) => {
         if (!active) return;
@@ -118,12 +152,15 @@ function NoteEditor({ id }: { id: string }) {
         let folderId = entity.folderId;
         while (folderId && !seen.has(folderId)) {
           seen.add(folderId);
-          const folder = await localDb.entities.get(folderId);
+          const folder = await database.entities.get(folderId);
           if (!folder || folder.kind !== "folder") break;
           parents.unshift(folder);
           folderId = folder.parentId;
         }
+        if (!active) return;
         setBreadcrumbs(parents);
+        if (noteRef.current) return;
+        persistedTitle.current = entity.title;
         if (entity.type === "whiteboard") {
           sourceRef.current = "";
           persistedSource.current = "";
@@ -146,14 +183,12 @@ function NoteEditor({ id }: { id: string }) {
         clearTimeout(timer.current);
         timer.current = null;
       }
-      if (noteRef.current?.id === id && sourceRef.current !== persistedSource.current)
-        void updateLocalNote(id, { content: sourceRef.current }, undefined, noteRef.current?.revision).then(() =>
-          scheduleSync(0),
-        );
-      else scheduleSync(0);
+      // The writer hook flushes the captured database before releasing its lease.
+      scheduleSync(0);
     };
   }, [
     id,
+    database,
     locale.library.loadingError,
     locale.library.noteNotFound,
     locale.library.pendingSync,
@@ -165,17 +200,27 @@ function NoteEditor({ id }: { id: string }) {
       try {
         if (pathname !== `/notes/${id}`) return;
         const current = noteRef.current;
+        if (!getWriteLease()) return;
         if (!current || current.id !== id) throw new Error("The selected note changed. Reopen it before editing.");
-        const next = await updateLocalNote(current.id, { content: value }, undefined, current.revision);
+        const next = await updateLocalNote(
+          current.id,
+          { content: value },
+          database,
+          current.revision,
+          getWriteLease(),
+          current,
+        );
         setNote(next);
+        noteRef.current = next;
         persistedSource.current = value;
         setStatus(locale.library.pendingSync);
         scheduleSync();
       } catch (error) {
+        if (error instanceof DraftRecoveredError) persistedSource.current = value;
         setStatus(error instanceof Error ? error.message : locale.library.saveError);
       }
     },
-    [id, pathname, locale.library.pendingSync, locale.library.saveError],
+    [database, id, pathname, locale.library.pendingSync, locale.library.saveError, getWriteLease],
   );
 
   function change(value: string) {
@@ -193,8 +238,51 @@ function NoteEditor({ id }: { id: string }) {
   const saveNow = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    await persist(sourceRef.current);
-  }, [persist]);
+    if (writer.canWrite && sourceRef.current !== persistedSource.current) await persist(sourceRef.current);
+  }, [persist, writer.canWrite]);
+
+  useLayoutEffect(() => {
+    flushDraft.current = async () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      await flushWhiteboard.current?.();
+      const current = noteRef.current;
+      if (!current) return;
+      const changes: Partial<Pick<LocalNote, "title" | "content">> = {};
+      if (sourceRef.current !== persistedSource.current && current.type !== "whiteboard")
+        changes.content = sourceRef.current;
+      if (current.title !== persistedTitle.current) changes.title = current.title;
+      if (!Object.keys(changes).length) return;
+      try {
+        const next = await updateLocalNote(id, changes, database, current.revision, getWriteLease(), current);
+        noteRef.current = next;
+        setNote(next);
+        persistedSource.current = sourceRef.current;
+        persistedTitle.current = current.title;
+        scheduleSync();
+      } catch (error) {
+        if (error instanceof DraftRecoveredError) {
+          persistedSource.current = sourceRef.current;
+          persistedTitle.current = current.title;
+        }
+        setStatus(error instanceof Error ? error.message : locale.library.saveError);
+        throw error;
+      }
+    };
+    reloadDraft.current = async () => {
+      const entity = await database.entities.get(id);
+      if (!entity || entity.kind !== "note" || entity.deletedAt) throw new Error("Note not found.");
+      noteRef.current = entity;
+      persistedTitle.current = entity.title;
+      if (entity.type !== "whiteboard") {
+        sourceRef.current = String(entity.content ?? "");
+        persistedSource.current = sourceRef.current;
+        setSource(sourceRef.current);
+      }
+      setNote(entity);
+      setEditorGeneration((value) => value + 1);
+    };
+  });
 
   useEffect(() => {
     if (note?.type !== "markdown") return;
@@ -233,10 +321,12 @@ function NoteEditor({ id }: { id: string }) {
   }
 
   async function saveTitle() {
-    if (!note || !writer.canWrite) return;
+    if (!note || !writer.canWrite || note.title === persistedTitle.current) return;
     try {
-      const saved = await updateLocalNote(id, { title: note.title }, undefined, note.revision);
+      const saved = await updateLocalNote(id, { title: note.title }, database, note.revision, getWriteLease(), note);
       setNote(saved);
+      noteRef.current = saved;
+      persistedTitle.current = saved.title;
       setStatus(locale.library.pendingSync);
       scheduleSync();
     } catch (error) {
@@ -247,9 +337,9 @@ function NoteEditor({ id }: { id: string }) {
   async function moveNote() {
     if (!note || !writer.canWrite) return;
     try {
-      await moveLocalEntity(note.id, destination || null);
+      await moveLocalEntity(note.id, destination || null, database, getWriteLease());
       setNote({ ...note, folderId: destination || null });
-      const all = await listLocalFolders();
+      const all = await listLocalFolders(database);
       setFolders(all);
       const path: LocalFolder[] = [];
       let parentId = destination || null;
@@ -271,8 +361,9 @@ function NoteEditor({ id }: { id: string }) {
   async function trashNote() {
     if (!note || !writer.canWrite || !window.confirm(locale.library.confirmDelete(note.title))) return;
     try {
-      if (note.type !== "whiteboard") await saveNow();
-      await setDeletedLocalEntity(note.id, true);
+      const lease = getWriteLease();
+      await flushDraft.current();
+      await setDeletedLocalEntity(note.id, true, database, lease);
       scheduleSync();
       router.replace("/");
     } catch {
@@ -285,7 +376,7 @@ function NoteEditor({ id }: { id: string }) {
     event.target.value = "";
     if (!file || !note || !writer.canWrite) return;
     try {
-      const asset = await storeLocalAttachment(file);
+      const asset = await storeLocalAttachment(file, database);
       const uri = `papyr-asset://${asset.id}`;
       const reference =
         note.type === "typst" ? `#image("${uri}")` : `![${file.name.replace(/[\\[\\]\\r\\n]/g, " ")}](${uri})`;
@@ -315,7 +406,7 @@ function NoteEditor({ id }: { id: string }) {
                 ? locale.library.writerUnsupported
                 : locale.library.writerAcquiring}
             <button type="button" onClick={writer.retry}>
-              {locale.library.retryWriter}
+              {writer.state === "locked" ? locale.library.continueEditingHere : locale.library.retryWriter}
             </button>
           </p>
         )}
@@ -375,6 +466,11 @@ function NoteEditor({ id }: { id: string }) {
         </header>
         {note.type === "whiteboard" ? (
           <WhiteboardEditor
+            key={`${note.id}:${editorGeneration}`}
+            database={database}
+            getWriteLease={getWriteLease}
+            originalNote={note}
+            onFlushReady={registerWhiteboardFlush}
             noteId={note.id}
             revision={note.revision}
             canWrite={writer.canWrite}

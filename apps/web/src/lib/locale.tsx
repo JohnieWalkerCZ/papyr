@@ -229,6 +229,7 @@ export const messages = {
       writerLocked: "This note is being edited in another tab. This tab is read-only.",
       writerUnsupported: "This browser cannot safely lock this note for editing. This tab is read-only.",
       retryWriter: "Try editing",
+      continueEditingHere: "Continue editing here",
     },
     home: {
       phase: "Local notebook",
@@ -524,6 +525,7 @@ export const messages = {
       writerLocked: "Tento zápis upravuje jiná karta. Tato karta je pouze pro čtení.",
       writerUnsupported: "Tento prohlížeč neumí bezpečně zamknout zápis. Tato karta je pouze pro čtení.",
       retryWriter: "Zkusit upravovat",
+      continueEditingHere: "Pokračovat v úpravách zde",
     },
     home: {
       phase: "Místní zápisník",

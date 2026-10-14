@@ -99,6 +99,17 @@ catch (Exception error) when (error is not OperationCanceledException)
 app.Services.GetServices<IHostedService>().OfType<ChangeRetentionService>().Single().StartupCompleted = true;
 app.UseForwardedHeaders();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var expectedAccount = context.Request.Headers["X-Papyr-Account"];
+    if (expectedAccount.Count > 0 && expectedAccount.ToString() != context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { error = new { code = "ACCOUNT_CHANGED", message = "The signed-in account changed. Sign in again before syncing." } });
+        return;
+    }
+    await next(context);
+});
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapGet("/health/live", () => Results.Ok(new { status = "healthy" }));
