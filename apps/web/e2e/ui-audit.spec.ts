@@ -49,6 +49,25 @@ test("implemented routes have no axe WCAG A/AA violations on desktop and mobile 
   }
 });
 
+test("empty-library creation actions create a local note and the New menu supports arrow keys", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Create Markdown note" }).last().click();
+  await expect(page).toHaveURL(/\/notes\//);
+  await expect(page.getByRole("textbox", { name: "Markdown source" })).toBeVisible();
+
+  await page.goto("/");
+  const trigger = page.getByRole("button", { name: "New", exact: true });
+  await trigger.click();
+  await trigger.press("ArrowDown");
+  const menu = page.locator(".create-menu-popover");
+  await expect(menu.getByRole("button", { name: "Create Markdown note" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("button", { name: "Create Typst note" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/notes\//);
+  await expect(page.getByRole("textbox", { name: "Typst source" })).toBeVisible();
+});
+
 test("Czech language persists and Typst narrow view switches source and preview", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -81,6 +100,15 @@ test("Typst preview renders a readable PDF page at mobile width", async ({ page 
   });
   expect(dimensions.width).toBeGreaterThan(100);
   expect(dimensions.height).toBeGreaterThan(200);
+  await expect
+    .poll(() => page.locator(".typst-pdf-pages").evaluate((element) => element.scrollWidth - element.clientWidth))
+    .toBeLessThanOrEqual(1);
+  const fitPage = page.getByRole("button", { name: "Fit page" });
+  await fitPage.click();
+  await expect(fitPage).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Reset zoom to fit width" })).toHaveText("100%");
+  await page.getByRole("button", { name: "Fit width", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Fit width", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.getByRole("button", { name: "Reset zoom to fit width" })).toHaveText("125%");
   await expect.poll(() => pageCanvas.evaluate((canvas) => canvas.getBoundingClientRect().width)).toBeGreaterThan(390);
@@ -115,12 +143,15 @@ test("theme preference cycles through light, dark and system and persists", asyn
   await page.evaluate(() => localStorage.removeItem("papyr-theme"));
 });
 
-test("application navigation can receive keyboard focus without a focus ring", async ({ page }) => {
+test("application navigation shows a visible focus ring", async ({ page }) => {
   await page.goto("/");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Papyr" })).toBeFocused();
-  const outline = await page.evaluate(() => getComputedStyle(document.activeElement!).outlineStyle);
-  expect(outline).toBe("none");
+  const focusStyle = await page.evaluate(() => {
+    const style = getComputedStyle(document.activeElement!);
+    return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+  });
+  expect(focusStyle).toEqual({ outlineStyle: "solid", outlineWidth: "2px" });
 });
 
 test("local-save failure does not navigate to a note that was not persisted", async ({ page }) => {

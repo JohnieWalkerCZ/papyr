@@ -26,7 +26,7 @@ import {
   type LocalFolder,
   type LocalNote,
 } from "@/lib/local-db";
-import { LocaleSettingsControls, useLocale } from "@/lib/locale";
+import { LocaleSettingsControls, useLocale, usePlatformSearchShortcut } from "@/lib/locale";
 import { AuthPanel } from "./auth-panel";
 import { initializeSyncTriggers, localConflicts, resolveConflict, scheduleSync, syncLocalLibrary } from "@/lib/sync";
 import type { LocalConflict } from "@/lib/local-db";
@@ -40,7 +40,7 @@ const OfflineNotePage = lazy(() => import("./notes/[id]/page"));
 
 export default function Home() {
   const copy = useLocale().library;
-  const common = useLocale().common;
+  const searchShortcut = usePlatformSearchShortcut();
   const router = useRouter();
   const pathname = usePathname();
   const [folders, setFolders] = useState<LocalFolder[]>([]);
@@ -810,7 +810,7 @@ export default function Home() {
         <button className="search-trigger" onClick={() => setSearchDialog(true)}>
           <Icon name="search" />
           <span>{copy.search}</span>
-          <kbd>⌘ K</kbd>
+          <kbd>{searchShortcut}</kbd>
         </button>
         <nav className="sidebar-nav">
           <div className="sidebar-section-heading">
@@ -862,9 +862,15 @@ export default function Home() {
                 <span>{copy.recent}</span>
               </div>
               {notes.slice(0, 5).map((note) => (
-                <Link className="recent-link" key={note.id} href={`/notes/${note.id}`}>
-                  <Icon name="note" />
-                  <span>{note.title}</span>
+                <Link
+                  className="recent-link"
+                  key={note.id}
+                  href={`/notes/${note.id}`}
+                  aria-label={`${note.title}, ${folderPathFor(note.folderId)}`}
+                >
+                  <Icon name={note.type === "typst" ? "typst" : note.type === "whiteboard" ? "board" : "note"} />
+                  <span title={note.title}>{note.title}</span>
+                  <small title={folderPathFor(note.folderId)}>{folderPathFor(note.folderId)}</small>
                 </Link>
               ))}
             </>
@@ -998,6 +1004,21 @@ export default function Home() {
                 <EmptyState
                   title={view === "search" ? copy.noMatches : copy.emptyTitle}
                   description={view === "search" ? copy.noMatchesHelp : copy.emptyHelp}
+                  action={
+                    view === "library" ? (
+                      <div className="empty-state-actions">
+                        <CreateActions
+                          copy={copy}
+                          parentId={selectedFolder}
+                          onCreate={(type, parentId) => void createDocument(type, parentId)}
+                        />
+                        <button className="secondary-action" type="button" onClick={() => startFolder(selectedFolder)}>
+                          <Icon name="folderPlus" />
+                          {copy.createFolder}
+                        </button>
+                      </div>
+                    ) : undefined
+                  }
                 />
               )}
           </section>
@@ -1256,13 +1277,7 @@ export default function Home() {
         </div>
         <h3>{copy.account}</h3>
         <AuthPanel />
-        <div className="settings-controls">
-          <div>
-            <strong>{common.theme}</strong>
-            <span>{common.themeDescription}</span>
-          </div>
-          <LocaleSettingsControls />
-        </div>
+        <LocaleSettingsControls />
         <h3>{copy.serverSync}</h3>
         <p className="dialog-note">{copy.serverSyncDescription}</p>
         <p className="dialog-status">
@@ -1311,14 +1326,17 @@ export default function Home() {
                 <Link
                   role="option"
                   aria-selected={index === searchIndex}
+                  aria-label={`${note.title}, ${note.type}, ${folderPathFor(note.folderId)}`}
                   className={index === searchIndex ? "is-active" : ""}
                   key={note.id}
                   href={`/notes/${note.id}`}
                   onClick={() => setSearchDialog(false)}
                 >
                   <Icon name="note" />
-                  <span>{note.title}</span>
-                  <small>{note.type}</small>
+                  <span title={note.title}>{note.title}</span>
+                  <small title={folderPathFor(note.folderId)}>
+                    {note.type} · {folderPathFor(note.folderId)}
+                  </small>
                 </Link>
               ))
             ) : (

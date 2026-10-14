@@ -13,6 +13,11 @@
   --control-ink: #fff;
   --control-height: 2.75rem;
   --control-radius: 0.375rem;
+  --app-bg: var(--paper);
+  --sidebar-bg: var(--surface);
+  --surface-hover: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  --surface-selected: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --border-subtle: var(--line);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -69,8 +74,8 @@ body {
   font-size: 1rem;
 }
 *:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 a {
   color: var(--accent);
@@ -1539,34 +1544,23 @@ kbd {
 .app-dialog .auth-panel > button {
   margin-top: 0.5rem;
 }
-.settings-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid var(--line);
-}
-.settings-controls > div:first-child {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-}
-.settings-controls span {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-.settings-control-group {
-  display: flex;
-  gap: 0.4rem;
-}
-.settings-control-group button {
-  min-height: 2rem;
-}
 .preferences-controls {
   display: flex;
   flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.preference-group {
+  display: grid;
+  align-content: start;
   gap: 0.45rem;
+  min-width: 8rem;
+}
+.preference-group > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 .preferences-controls .theme-control,
 .preferences-controls .locale-control {
@@ -1899,10 +1893,6 @@ kbd {
   }
   .search-dialog {
     top: 8vh;
-  }
-  .settings-controls {
-    align-items: flex-start;
-    flex-direction: column;
   }
   .app-dialog {
     padding: 1rem;
@@ -2689,5 +2679,237 @@ kbd {
   }
   .document-title-group input {
     font-size: 1.12rem;
+  }
+}
+
+/* Shared Papyr finishing pass */
+button,
+input,
+select,
+textarea,
+.create-menu-popover,
+.item-menu-popover,
+.sync-popover,
+.app-dialog,
+.move-dialog,
+.search-dialog,
+.conflict-dialog {
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out;
+}
+button:disabled,
+button[aria-disabled="true"] {
+  filter: none;
+}
+.app-header {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 65%, transparent);
+  border-bottom-color: var(--border-subtle);
+}
+.app-sidebar {
+  background: var(--sidebar-bg);
+}
+.app-shell {
+  background: var(--app-bg);
+}
+.tree-row,
+.recent-link {
+  min-height: 2.35rem;
+}
+.tree-row.is-selected {
+  background: var(--surface-selected);
+}
+.content-row {
+  transition: background-color 120ms ease-out;
+}
+.content-row:focus-within {
+  background: var(--surface-hover);
+}
+.content-open:hover,
+.content-open:focus-visible {
+  background: transparent;
+}
+.item-menu > summary:focus-visible {
+  opacity: 1;
+}
+.recent-link {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.5rem;
+  row-gap: 0.05rem;
+  padding-block: 0.25rem;
+}
+.recent-link > svg {
+  grid-row: 1 / span 2;
+}
+.recent-link > span,
+.recent-link > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-link > span {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+.recent-link > small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.empty-state {
+  max-width: 34rem;
+  margin-inline: auto;
+  padding-block: clamp(3rem, 9vh, 6rem);
+}
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 30rem;
+}
+.empty-state-actions .create-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+.empty-state-actions .create-option:hover,
+.empty-state-actions .secondary-action:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+  filter: none;
+}
+.empty-state-actions .create-option svg,
+.empty-state-actions .secondary-action svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--accent);
+}
+.empty-state-actions .create-option > span small,
+.empty-state-actions .create-menu-divider {
+  display: none;
+}
+.document-titlebar {
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.document-title-group input {
+  min-height: 2.1rem;
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.25;
+}
+.writer-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line));
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+.writer-notice button {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.65rem;
+}
+.editor-toolbar,
+.type-editor-toolbar {
+  border-color: var(--line);
+  background: var(--surface);
+}
+.markdown-preview-pane .markdown-preview {
+  width: min(100%, 70ch);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.typst-pdf-controls {
+  position: static;
+  z-index: auto;
+  width: max-content;
+  max-width: calc(100% - 1rem);
+  margin: 0.5rem;
+  overflow-x: auto;
+  align-items: center;
+}
+.typst-preview-content:has(.typst-pdf-pages) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+.typst-pdf-pages {
+  min-height: 0;
+  flex: 1;
+}
+.typst-preview-content .stale-preview {
+  position: static;
+  align-self: flex-end;
+  margin: 0.35rem 0.5rem 0;
+}
+.typst-pdf-controls .fit-control {
+  white-space: nowrap;
+}
+.typst-pdf-controls .zoom-level {
+  min-width: 3.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.typst-pdf-pages {
+  align-items: center;
+}
+.typst-pdf-pages canvas {
+  max-width: 100%;
+  height: auto;
+}
+.preference-group .theme-control,
+.preference-group .locale-control {
+  width: max-content;
+  margin: 0;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 75%, var(--surface));
+  color: var(--control-ink);
+}
+@media (max-width: 45rem) {
+  .empty-state-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .empty-state-actions > button,
+  .empty-state-actions .create-option {
+    justify-content: flex-start;
+  }
+  .writer-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .typst-pdf-controls {
+    right: 0.5rem;
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
   }
 }

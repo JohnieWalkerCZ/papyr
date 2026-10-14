@@ -12,15 +12,16 @@ export function PdfPreview({
 }: {
   url: string;
   title: string;
-  controls: { zoomIn: string; zoomOut: string; resetZoom: string };
+  controls: { zoomIn: string; zoomOut: string; resetZoom: string; fitWidth: string; fitPage: string };
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const renderRef = useRef<(() => Promise<void>) | undefined>(undefined);
   const zoomAnchor = useRef<{ zoom: number; x: number; y: number; left: number; top: number } | undefined>(undefined);
   const pinchStart = useRef<{ distance: number; zoom: number } | undefined>(undefined);
   const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState<"width" | "page">("width");
   const zoomRef = useRef(zoom);
-  const previousZoom = useRef(zoom);
+  const fitModeRef = useRef(fitMode);
 
   const zoomAt = useCallback(
     (nextZoom: number, x?: number, y?: number) => {
@@ -67,7 +68,16 @@ export function PdfPreview({
           const page = await pdfDocument.getPage(pageNumber);
           if (cancelled || version !== renderVersion) return;
           const baseViewport = page.getViewport({ scale: 1 });
-          const viewport = page.getViewport({ scale: (container.clientWidth / baseViewport.width) * zoomRef.current });
+          const styles = getComputedStyle(container);
+          const availableWidth =
+            container.clientWidth - Number.parseFloat(styles.paddingLeft) - Number.parseFloat(styles.paddingRight);
+          const availableHeight =
+            container.clientHeight - Number.parseFloat(styles.paddingTop) - Number.parseFloat(styles.paddingBottom);
+          const fitScale =
+            fitModeRef.current === "page"
+              ? Math.min(availableWidth / baseViewport.width, availableHeight / baseViewport.height)
+              : availableWidth / baseViewport.width;
+          const viewport = page.getViewport({ scale: fitScale * zoomRef.current });
           const pixelRatio = window.devicePixelRatio || 1;
           const canvas = document.createElement("canvas");
           canvas.setAttribute("aria-label", `${title} ${pageNumber}`);
@@ -116,9 +126,18 @@ export function PdfPreview({
 
   useEffect(() => {
     zoomRef.current = zoom;
-    if (previousZoom.current !== zoom) void renderRef.current?.();
-    previousZoom.current = zoom;
-  }, [zoom]);
+    fitModeRef.current = fitMode;
+    void renderRef.current?.();
+  }, [fitMode, zoom]);
+
+  function fit(mode: "width" | "page") {
+    if (containerRef.current) {
+      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollTop = 0;
+    }
+    setFitMode(mode);
+    setZoom(1);
+  }
 
   useEffect(() => {
     const container = containerRef.current;
@@ -177,6 +196,24 @@ export function PdfPreview({
       <div className="typst-pdf-controls" role="group" aria-label={title}>
         <button
           type="button"
+          className="button fit-control"
+          aria-label={controls.fitWidth}
+          aria-pressed={fitMode === "width"}
+          onClick={() => fit("width")}
+        >
+          {controls.fitWidth}
+        </button>
+        <button
+          type="button"
+          className="button fit-control"
+          aria-label={controls.fitPage}
+          aria-pressed={fitMode === "page"}
+          onClick={() => fit("page")}
+        >
+          {controls.fitPage}
+        </button>
+        <button
+          type="button"
           className="button"
           aria-label={controls.zoomOut}
           disabled={zoom <= 0.5}
@@ -184,7 +221,12 @@ export function PdfPreview({
         >
           −
         </button>
-        <button type="button" className="button" aria-label={controls.resetZoom} onClick={() => zoomAt(1)}>
+        <button
+          type="button"
+          className="button zoom-level"
+          aria-label={controls.resetZoom}
+          onClick={() => fit("width")}
+        >
           {Math.round(zoom * 100)}%
         </button>
         <button

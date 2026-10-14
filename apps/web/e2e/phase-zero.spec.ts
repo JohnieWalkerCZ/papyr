@@ -176,7 +176,7 @@ test("a second tab cannot write the same note until the first tab releases its l
 
   const secondTab = await context.newPage();
   await secondTab.goto("/");
-  await secondTab.getByRole("link", { name: "Locked note", exact: true }).click();
+  await secondTab.getByRole("link", { name: "Locked note, Library root", exact: true }).click();
   await expect(secondTab).toHaveURL(noteUrl);
   const secondEditor = secondTab.getByRole("textbox", { name: "Markdown source" });
   await expect(secondEditor).toHaveAttribute("aria-readonly", "true");
@@ -325,7 +325,7 @@ test("nested folders support note moves and local text search", async ({ page })
   await expect(page.locator(".item-list a").filter({ hasText: "Sequences" })).toBeVisible();
   await page.getByRole("button", { name: /Search title and note text/ }).click();
   await page.getByPlaceholder("Search title and note text").fill("Fibonacci");
-  await expect(page.getByRole("link", { name: "Sequences", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: /Sequences, markdown, School \/ Physics/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await createNote(page, "Integrals in physics", "typst");
   const source = page.getByRole("textbox", { name: "Typst source" });

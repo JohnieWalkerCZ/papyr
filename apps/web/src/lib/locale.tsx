@@ -6,6 +6,7 @@ export const messages = {
   en: {
     common: {
       language: "Čeština",
+      languageLabel: "Language",
       switchLanguage: "Switch language to Czech",
       back: "← Back to Papyr",
       retry: "Retry",
@@ -272,6 +273,8 @@ export const messages = {
       zoomIn: "Zoom in",
       zoomOut: "Zoom out",
       resetZoom: "Reset zoom to fit width",
+      fitWidth: "Fit width",
+      fitPage: "Fit page",
       emptyPreview: "PDF preview appears here",
       stalePreview: "Showing the last successful PDF · source has errors",
       notStarted: "Compiler not started",
@@ -302,6 +305,7 @@ export const messages = {
   cs: {
     common: {
       language: "English",
+      languageLabel: "Jazyk",
       switchLanguage: "Přepnout jazyk na angličtinu",
       back: "← Zpět do Papyr",
       retry: "Zkusit znovu",
@@ -568,6 +572,8 @@ export const messages = {
       zoomIn: "Přiblížit",
       zoomOut: "Oddálit",
       resetZoom: "Přizpůsobit šířce",
+      fitWidth: "Přizpůsobit šířce",
+      fitPage: "Přizpůsobit stránce",
       emptyPreview: "Zde se zobrazí náhled PDF",
       stalePreview: "Zobrazuje se poslední úspěšné PDF · zdroj obsahuje chyby",
       notStarted: "Kompilátor nebyl spuštěn",
@@ -703,6 +709,15 @@ export function useLocale() {
   return messages[useCurrentLocale()];
 }
 
+export function usePlatformSearchShortcut() {
+  const isApple = useSyncExternalStore(
+    () => () => {},
+    () => /Mac|iPhone|iPad/.test(navigator.platform),
+    () => false,
+  );
+  return isApple ? "⌘ K" : "Ctrl K";
+}
+
 export function useCurrentLocale() {
   return useSyncExternalStore<Locale>(subscribeToLocale, getLocaleSnapshot, () => "en");
 }
@@ -726,10 +741,17 @@ function LocaleControl({ locale }: { locale: Locale }) {
 export function LocaleSettingsControls() {
   const locale = useCurrentLocale();
   const theme = useSyncExternalStore<Theme>(subscribeToTheme, getThemeSnapshot, () => "system");
+  const copy = messages[locale].common;
   return (
     <div className="preferences-controls">
-      <ThemeControl locale={locale} theme={theme} />
-      <LocaleControl locale={locale} />
+      <div className="preference-group">
+        <span>{copy.theme}</span>
+        <ThemeControl locale={locale} theme={theme} />
+      </div>
+      <div className="preference-group">
+        <span>{copy.languageLabel}</span>
+        <LocaleControl locale={locale} />
+      </div>
     </div>
   );
 }

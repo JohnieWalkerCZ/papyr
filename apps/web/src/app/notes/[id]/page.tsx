@@ -399,7 +399,7 @@ function NoteEditor({ id }: { id: string }) {
     <DocumentEditorShell note={note} path={breadcrumbs} status={status}>
       <div className="document-editor">
         {!writer.canWrite && (
-          <p role="status" className="save-status">
+          <p role="status" className="save-status writer-notice">
             {writer.state === "locked"
               ? locale.library.writerLocked
               : writer.state === "unsupported"

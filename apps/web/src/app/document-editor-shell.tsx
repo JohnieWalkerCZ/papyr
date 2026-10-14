@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { createFolder, listLocalFolders, listLocalNotes, type LocalFolder, type LocalNote } from "@/lib/local-db";
 import { createLocalDocument } from "@/lib/create-document";
-import { useLocale, LocaleSettingsControls } from "@/lib/locale";
+import { useLocale, usePlatformSearchShortcut, LocaleSettingsControls } from "@/lib/locale";
 import { localConflicts, scheduleSync, syncLocalLibrary } from "@/lib/sync";
 import { AuthPanel } from "./auth-panel";
 import { CreateMenu } from "./document-creation-menu";
@@ -37,7 +37,7 @@ export function DocumentEditorShell({
   children: ReactNode;
 }) {
   const copy = useLocale().library;
-  const common = useLocale().common;
+  const searchShortcut = usePlatformSearchShortcut();
   const router = useRouter();
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [folders, setFolders] = useState<LocalFolder[]>([]);
@@ -309,7 +309,7 @@ export function DocumentEditorShell({
             onChange={(event) => setSearch(event.target.value)}
             placeholder={copy.search}
           />
-          <kbd>⌘ K</kbd>
+          <kbd>{searchShortcut}</kbd>
         </label>
         <nav className="sidebar-nav">
           <div className="sidebar-section-heading">
@@ -378,10 +378,7 @@ export function DocumentEditorShell({
           </div>
           <h3>{copy.account}</h3>
           <AuthPanel />
-          <div className="settings-controls">
-            <strong>{common.theme}</strong>
-            <LocaleSettingsControls />
-          </div>
+          <LocaleSettingsControls />
           <h3>{copy.serverSync}</h3>
           <p>{copy.serverSyncDescription}</p>
         </dialog>

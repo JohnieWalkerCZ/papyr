@@ -53,6 +53,20 @@ export function CreateMenu({
           event.preventDefault();
           setOpen(false);
           event.currentTarget.querySelector("button")?.focus();
+          return;
+        }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+          const actions = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".create-option"));
+          if (!actions.length) return;
+          event.preventDefault();
+          const current = actions.indexOf(document.activeElement as HTMLButtonElement);
+          const next =
+            event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? actions.length - 1
+                : (current + (event.key === "ArrowDown" ? 1 : -1) + actions.length) % actions.length;
+          actions[next].focus();
         }
       }}
     >
