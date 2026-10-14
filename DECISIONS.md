@@ -1,5 +1,10 @@
 # DECISIONS.md — architecture decision log
 
+### Sync waiting diagnostics — durable lease visibility (2026-10-14)
+
+- Repeated authenticated/online attempts ending in `waiting` before `syncing` mean durable lease acquisition was deferred. Restore acquisition, remaining lease time, heartbeat result, and release result diagnostics removed during the multi-client implementation. Log only timing/ownership outcomes, never note data or credentials.
+- Preserve active lease ownership and legacy five-minute expiry. Browser regressions cover both current 30-second and legacy five-minute abandoned leases with unavailable/absent Web Locks. No migration, storage purge, or shortened legacy lease is needed. The reported deployment's actual lease holder remains unverified.
+
 ### Multiple clients — bounded sync passes and safe editor handoff (2026-10-14)
 
 - User approved immediately usable local tabs, shared-browser sync coordination, same-note handoff, and independent device sync with explicit conflicts. Reject a server-wide barrier waiting for all clients: offline/suspended clients cannot reliably acknowledge it.

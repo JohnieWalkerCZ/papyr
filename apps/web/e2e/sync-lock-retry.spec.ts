@@ -1,12 +1,24 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type ConsoleMessage } from "@playwright/test";
 
-for (const browserLockBusy of [false, true]) {
-  test(`${browserLockBusy ? "Busy Web Lock" : "HTTP fallback"} respects a valid lease and automatically syncs after expiry`, async ({
+for (const [browserLockBusy, leaseDuration] of [
+  [false, 30_000],
+  [false, 300_000],
+  [true, 30_000],
+  [true, 300_000],
+] as const) {
+  test(`${browserLockBusy ? "Busy Web Lock" : "HTTP fallback"} respects a ${leaseDuration}ms lease and automatically syncs after expiry`, async ({
     page,
   }) => {
     const account = "e797175c-b30c-4637-b294-58294f501687";
     const noteId = "32fe58bb-c39d-483a-8571-824ea6ac5b8a";
     const mutations: string[] = [];
+    const leaseDiagnostics: Array<{ remainingMs: number; retryDelayMs: number }> = [];
+    const captureLease = async (message: ConsoleMessage) => {
+      if (!message.text().startsWith("[Papyr sync] deferred: another tab holds the IndexedDB lease")) return;
+      page.off("console", captureLease);
+      leaseDiagnostics.push(await message.args()[1].jsonValue());
+    };
+    page.on("console", captureLease);
     await page.clock.install();
     await page.addInitScript(
       (busy) =>
@@ -42,7 +54,7 @@ for (const browserLockBusy of [false, true]) {
     await page.goto("/");
     await expect(page.locator(".sync-indicator")).toContainText("Synced to server");
     await page.evaluate(
-      async ({ account, noteId }) => {
+      async ({ account, noteId, leaseDuration }) => {
         await new Promise<void>((resolve, reject) => {
           const request = indexedDB.open(`papyr-account-${account}`);
           request.onsuccess = () => {
@@ -80,7 +92,7 @@ for (const browserLockBusy of [false, true]) {
               acceptedOperationIds: [],
               updatedAt: now,
               lockOwner: "other-tab",
-              lockExpiresAt: now + 300_000,
+              lockExpiresAt: now + leaseDuration,
             });
             transaction.oncomplete = () => {
               database.close();
@@ -91,16 +103,20 @@ for (const browserLockBusy of [false, true]) {
           request.onerror = () => reject(request.error);
         });
       },
-      { account, noteId },
+      { account, noteId, leaseDuration },
     );
     await page.locator(".sync-indicator").click();
     await page.getByRole("button", { name: "Sync now", exact: true }).click();
     await expect(page.locator(".sync-indicator")).toContainText("Waiting for another tab");
     expect(mutations).toHaveLength(0);
+    await expect.poll(() => leaseDiagnostics.length).toBeGreaterThan(0);
+    expect(leaseDiagnostics[0].retryDelayMs).toBe(1000);
+    expect(leaseDiagnostics[0].remainingMs).toBeGreaterThan(leaseDuration - 10_000);
+    expect(leaseDiagnostics[0].remainingMs).toBeLessThanOrEqual(leaseDuration);
     await page.clock.fastForward(10_000);
     await expect(page.locator(".sync-indicator")).toContainText("Waiting for another tab");
     expect(mutations).toHaveLength(0);
-    await page.clock.fastForward(300_100);
+    await page.clock.fastForward(leaseDuration - 10_000 + 1100);
     await expect.poll(() => mutations.length).toBe(1);
     await expect(page.locator(".sync-indicator")).toContainText("Synced to server");
     await expect(page.getByText("Pending lock recovery", { exact: true }).first()).toBeVisible();

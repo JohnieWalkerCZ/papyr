@@ -611,21 +611,29 @@ async function withSyncLock(database: typeof localDb, epoch: number): Promise<Sy
   const work = async (): Promise<SyncState> => {
     if (localDb !== database || epoch !== sessionEpoch || !authenticated) return "idle";
     const lease = { id: "state", owner: createUuid() };
+    console.info("[Papyr sync] acquiring IndexedDB lease");
     if (!(await acquireLocalLease(lease.id, lease.owner, database))) {
+      const current = await database.syncMeta.get(lease.id);
+      console.warn("[Papyr sync] deferred: another tab holds the IndexedDB lease", {
+        remainingMs: Math.max(0, (current?.lockExpiresAt ?? 0) - Date.now()),
+        retryDelayMs: 1000,
+      });
       announce("waiting", "Waiting for another tab to finish syncing.");
       scheduleLocalSync(1000);
       return "waiting";
     }
+    console.info("[Papyr sync] IndexedDB lease acquired");
     const heartbeat = setInterval(() => {
-      void renewLocalLease(lease, database).catch((error) =>
-        console.error("[Papyr sync] lock heartbeat failed", safeErrorDetails(error)),
-      );
+      void renewLocalLease(lease, database)
+        .then((renewed) => console.debug("[Papyr sync] lease heartbeat finished", { renewed }))
+        .catch((error) => console.error("[Papyr sync] lock heartbeat failed", safeErrorDetails(error)));
     }, 10_000);
     try {
       return await runScopedSync(database, epoch, lease);
     } finally {
       clearInterval(heartbeat);
-      await releaseLocalLease(lease, database);
+      const released = await releaseLocalLease(lease, database);
+      console.info("[Papyr sync] IndexedDB lease release finished", { released });
       if (localDb === database) channel?.postMessage({ type: "SYNC_RELEASED" });
     }
   };
