@@ -33,6 +33,7 @@ import type { LocalConflict } from "@/lib/local-db";
 import { compareTextVersions } from "@/lib/conflict-diff";
 import { CreateActions, CreateMenu } from "./document-creation-menu";
 import { createLocalDocument } from "@/lib/create-document";
+import { useSidebarWidth } from "@/lib/use-sidebar-width";
 
 type View = "library" | "trash" | "search";
 type SortBy = "name" | "modified" | "created";
@@ -41,6 +42,7 @@ const OfflineNotePage = lazy(() => import("./notes/[id]/page"));
 export default function Home() {
   const copy = useLocale().library;
   const searchShortcut = usePlatformSearchShortcut();
+  const sidebarWidth = useSidebarWidth();
   const router = useRouter();
   const pathname = usePathname();
   const [folders, setFolders] = useState<LocalFolder[]>([]);
@@ -722,7 +724,10 @@ export default function Home() {
     );
 
   return (
-    <main className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileNav ? "mobile-nav-open" : ""}`}>
+    <main
+      className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileNav ? "mobile-nav-open" : ""}`}
+      style={{ "--sidebar-width": collapsed ? "4.2rem" : `${sidebarWidth.width}px` } as React.CSSProperties}
+    >
       <header className="app-header">
         <button
           className="icon-button mobile-menu-button"
@@ -880,6 +885,21 @@ export default function Home() {
           <Icon name="settings" />
           {copy.settings}
         </button>
+        <div
+          className="sidebar-resize-handle"
+          role="separator"
+          aria-label={copy.resizeSidebar}
+          aria-orientation="vertical"
+          aria-valuemin={220}
+          aria-valuemax={420}
+          aria-valuenow={sidebarWidth.width}
+          tabIndex={collapsed ? -1 : 0}
+          onPointerDown={sidebarWidth.onPointerDown}
+          onPointerMove={sidebarWidth.onPointerMove}
+          onPointerUp={sidebarWidth.onPointerUp}
+          onPointerCancel={sidebarWidth.onPointerUp}
+          onKeyDown={sidebarWidth.onKeyDown}
+        />
       </aside>
       {mobileNav && (
         <button className="mobile-scrim" aria-label={copy.closeNavigation} onClick={() => setMobileNav(false)} />

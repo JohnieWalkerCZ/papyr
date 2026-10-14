@@ -68,6 +68,26 @@ test("empty-library creation actions create a local note and the New menu suppor
   await expect(page.getByRole("textbox", { name: "Typst source" })).toBeVisible();
 });
 
+test("sidebar width is adjustable by pointer and keyboard and persists across reload", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const separator = page.getByRole("separator", { name: "Resize sidebar" });
+  await separator.press("ArrowRight");
+  await expect(separator).toHaveAttribute("aria-valuenow", "288");
+  await page.reload();
+  const restored = page.getByRole("separator", { name: "Resize sidebar" });
+  await expect(restored).toHaveAttribute("aria-valuenow", "288");
+  const bounds = await restored.boundingBox();
+  if (!bounds) throw new Error("Sidebar resize handle is not visible.");
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 + 48, bounds.y + 120);
+  await page.mouse.up();
+  await expect(restored).toHaveAttribute("aria-valuenow", "336");
+  await page.reload();
+  await expect(page.getByRole("separator", { name: "Resize sidebar" })).toHaveAttribute("aria-valuenow", "336");
+});
+
 test("Czech language persists and Typst narrow view switches source and preview", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

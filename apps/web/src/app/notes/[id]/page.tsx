@@ -86,6 +86,8 @@ function NoteEditor({ id }: { id: string }) {
   const persistedSource = useRef(source);
   const noteRef = useRef(note);
   const persistedTitle = useRef("");
+  const titleDraft = useRef("");
+  const cancelTitleEdit = useRef(false);
   const whiteboardDirty = useRef(false);
   const onWhiteboardDirtyChange = useCallback((dirty: boolean) => {
     whiteboardDirty.current = dirty;
@@ -120,6 +122,7 @@ function NoteEditor({ id }: { id: string }) {
           setEditorGeneration((value) => value + 1);
         setNote(entity);
         persistedTitle.current = entity.title;
+        titleDraft.current = entity.title;
         if (entity.type !== "whiteboard") {
           const content = String(entity.content ?? "");
           sourceRef.current = content;
@@ -161,6 +164,7 @@ function NoteEditor({ id }: { id: string }) {
         setBreadcrumbs(parents);
         if (noteRef.current) return;
         persistedTitle.current = entity.title;
+        titleDraft.current = entity.title;
         if (entity.type === "whiteboard") {
           sourceRef.current = "";
           persistedSource.current = "";
@@ -274,6 +278,7 @@ function NoteEditor({ id }: { id: string }) {
       if (!entity || entity.kind !== "note" || entity.deletedAt) throw new Error("Note not found.");
       noteRef.current = entity;
       persistedTitle.current = entity.title;
+      titleDraft.current = entity.title;
       if (entity.type !== "whiteboard") {
         sourceRef.current = String(entity.content ?? "");
         persistedSource.current = sourceRef.current;
@@ -321,12 +326,26 @@ function NoteEditor({ id }: { id: string }) {
   }
 
   async function saveTitle() {
-    if (!note || !writer.canWrite || note.title === persistedTitle.current) return;
+    const current = noteRef.current;
+    if (!current || !writer.canWrite) return;
+    const title =
+      titleDraft.current.trim() ||
+      (current.type === "typst"
+        ? locale.library.untitledTypst
+        : current.type === "whiteboard"
+          ? locale.library.untitledWhiteboard
+          : locale.library.untitled);
+    if (title === persistedTitle.current) {
+      titleDraft.current = title;
+      if (title !== current.title) setNote({ ...current, title });
+      return;
+    }
     try {
-      const saved = await updateLocalNote(id, { title: note.title }, database, note.revision, getWriteLease(), note);
+      const saved = await updateLocalNote(id, { title }, database, current.revision, getWriteLease(), current);
       setNote(saved);
       noteRef.current = saved;
       persistedTitle.current = saved.title;
+      titleDraft.current = saved.title;
       setStatus(locale.library.pendingSync);
       scheduleSync();
     } catch (error) {
@@ -426,8 +445,28 @@ function NoteEditor({ id }: { id: string }) {
               aria-label="Note title"
               value={note.title}
               readOnly={!writer.canWrite}
-              onChange={(event) => writer.canWrite && setNote({ ...note, title: event.target.value })}
-              onBlur={() => void saveTitle()}
+              onChange={(event) => {
+                if (!writer.canWrite) return;
+                titleDraft.current = event.target.value;
+                setNote({ ...note, title: event.target.value });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelTitleEdit.current = true;
+                  titleDraft.current = persistedTitle.current;
+                  setNote({ ...note, title: persistedTitle.current });
+                  event.currentTarget.blur();
+                }
+              }}
+              onBlur={() => {
+                if (cancelTitleEdit.current) cancelTitleEdit.current = false;
+                else void saveTitle();
+              }}
             />
           </div>
           <p className="save-status" role="status" aria-live="polite">

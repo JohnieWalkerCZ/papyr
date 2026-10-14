@@ -24,6 +24,7 @@ import { useLocale, usePlatformSearchShortcut, LocaleSettingsControls } from "@/
 import { localConflicts, scheduleSync, syncLocalLibrary } from "@/lib/sync";
 import { AuthPanel } from "./auth-panel";
 import { CreateMenu } from "./document-creation-menu";
+import { useSidebarWidth } from "@/lib/use-sidebar-width";
 
 export function DocumentEditorShell({
   note,
@@ -38,6 +39,7 @@ export function DocumentEditorShell({
 }) {
   const copy = useLocale().library;
   const searchShortcut = usePlatformSearchShortcut();
+  const sidebarWidth = useSidebarWidth();
   const router = useRouter();
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [folders, setFolders] = useState<LocalFolder[]>([]);
@@ -227,7 +229,10 @@ export function DocumentEditorShell({
   }
 
   return (
-    <main className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileNav ? "mobile-nav-open" : ""}`}>
+    <main
+      className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${mobileNav ? "mobile-nav-open" : ""}`}
+      style={{ "--sidebar-width": collapsed ? "4.2rem" : `${sidebarWidth.width}px` } as React.CSSProperties}
+    >
       <header className="app-header">
         <button
           className="icon-button mobile-menu-button"
@@ -348,6 +353,21 @@ export function DocumentEditorShell({
         <button className="sidebar-settings" onClick={() => setSettings(true)}>
           <Settings aria-hidden="true" size={16} /> {copy.settings}
         </button>
+        <div
+          className="sidebar-resize-handle"
+          role="separator"
+          aria-label={copy.resizeSidebar}
+          aria-orientation="vertical"
+          aria-valuemin={220}
+          aria-valuemax={420}
+          aria-valuenow={sidebarWidth.width}
+          tabIndex={collapsed ? -1 : 0}
+          onPointerDown={sidebarWidth.onPointerDown}
+          onPointerMove={sidebarWidth.onPointerMove}
+          onPointerUp={sidebarWidth.onPointerUp}
+          onPointerCancel={sidebarWidth.onPointerUp}
+          onKeyDown={sidebarWidth.onKeyDown}
+        />
       </aside>
       {mobileNav && (
         <button className="mobile-scrim" aria-label={copy.closeNavigation} onClick={() => setMobileNav(false)} />

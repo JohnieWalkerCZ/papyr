@@ -118,6 +118,31 @@ test("switching between open notes saves edits only to the selected note", async
   await expect.poll(() => localNoteContent(page, "Switch second")).toBe("second note edited");
 });
 
+test("document title commits on Enter, cancels on Escape, and replaces an empty title", async ({ page }) => {
+  await page.goto("/");
+  await createNote(page, "Initial title");
+  const title = page.getByRole("textbox", { name: "Note title" });
+  await title.fill("Discard this title");
+  await title.press("Escape");
+  await expect(title).toHaveValue("Initial title");
+  await title.fill("Saved title");
+  await title.press("Enter");
+  await expect(title).toHaveValue("Saved title");
+  await expect(page.locator(".document-titlebar .save-status")).toContainText("Saved locally", { timeout: 5_000 });
+  await page.reload();
+  const reloadedTitle = page.getByRole("textbox", { name: "Note title" });
+  await expect(reloadedTitle).toHaveValue("Saved title");
+  await page.goto("/");
+  await createNote(page, "Fallback title");
+  const fallbackTitle = page.getByRole("textbox", { name: "Note title" });
+  await fallbackTitle.fill("   ");
+  await fallbackTitle.press("Enter");
+  await expect(fallbackTitle).toHaveValue("Untitled");
+  await expect(page.locator(".document-titlebar .save-status")).toContainText("Saved locally", { timeout: 5_000 });
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Note title" })).toHaveValue("Untitled");
+});
+
 test("a remote revision arriving during an edit preserves both versions as a conflict", async ({ page }) => {
   await page.goto("/");
   await createNote(page, "Revision guarded");
