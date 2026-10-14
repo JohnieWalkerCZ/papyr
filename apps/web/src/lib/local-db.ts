@@ -570,6 +570,43 @@ export async function releaseLocalSyncLock(lockOwner: string, database = localDb
   return releaseLocalLease({ id: "state", owner: lockOwner }, database);
 }
 
+export async function retryRejectedWhiteboardSnapshot(operationId: string, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.entities, database.outbox, async () => {
+    const operation = await database.outbox.get(operationId);
+    if (
+      !operation ||
+      operation.entityType !== "note" ||
+      !["create", "update"].includes(operation.action) ||
+      operation.attempts > 0 ||
+      !("content" in operation.payload)
+    )
+      return false;
+    const entity = await database.entities.get(operation.entityId);
+    const content = operation.payload.content as {
+      store?: unknown;
+      schema?: { schemaVersion?: unknown; sequences?: unknown };
+    } | null;
+    if (
+      entity?.kind !== "note" ||
+      entity.type !== "whiteboard" ||
+      entity.contentSchemaVersion !== 1 ||
+      !content ||
+      typeof content.store !== "object" ||
+      content.store === null ||
+      Array.isArray(content.store) ||
+      content.schema?.schemaVersion !== 2 ||
+      !content.schema.sequences ||
+      typeof content.schema.sequences !== "object" ||
+      Array.isArray(content.schema.sequences)
+    )
+      return false;
+    // Old APIs permanently rejected schema v2; retry the exact snapshot once with a fresh ID.
+    await database.outbox.add({ ...operation, operationId: createUuid(), attempts: operation.attempts + 1 });
+    await database.outbox.delete(operationId);
+    return true;
+  });
+}
+
 export async function repairRejectedUnsyncedOperation(operationId: string, database = localDb): Promise<boolean> {
   return database.transaction("rw", database.entities, database.outbox, async () => {
     const operation = await database.outbox.get(operationId);

@@ -346,6 +346,44 @@ public sealed class AuthEndpointsTests
             Assert.Empty(secondLibrary.RootElement.GetProperty("folders").EnumerateArray());
             Assert.Empty(secondLibrary.RootElement.GetProperty("notes").EnumerateArray());
 
+            var snapshot = JsonSerializer.Deserialize<JsonElement>(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "whiteboard-v2.json")));
+            var validWhiteboardCreate = new
+            {
+                operationId = Guid.NewGuid(), entityType = "note", entityId = whiteboardId, action = "create", baseRevision = (string?)null,
+                payload = new { title = "Current canvas", type = "whiteboard", contentSchemaVersion = 1, content = snapshot },
+            };
+            using var validWhiteboardResult = await Post(client, "/api/v1/mutations", new { operations = new[] { validWhiteboardCreate } }, csrf);
+            Assert.Equal("accepted", FirstMutationStatus(await validWhiteboardResult.Content.ReadAsStringAsync()));
+            using var storedWhiteboard = await client.GetAsync($"/api/v1/notes/{whiteboardId}");
+            using var storedWhiteboardJson = JsonDocument.Parse(await storedWhiteboard.Content.ReadAsStringAsync());
+            Assert.True(JsonElement.DeepEquals(snapshot, storedWhiteboardJson.RootElement.GetProperty("content")));
+            var whiteboardUpdate = new
+            {
+                operationId = Guid.NewGuid(), entityType = "note", entityId = whiteboardId, action = "update", baseRevision = "1",
+                payload = new { content = snapshot },
+            };
+            using var whiteboardUpdated = await Post(client, "/api/v1/mutations", new { operations = new[] { whiteboardUpdate } }, csrf);
+            Assert.Equal("accepted", FirstMutationStatus(await whiteboardUpdated.Content.ReadAsStringAsync()));
+            using var permanentRejection = await Post(client, "/api/v1/mutations", new { operations = new[] { invalidWhiteboardCreate } }, csrf);
+            Assert.Equal("rejected", FirstMutationStatus(await permanentRejection.Content.ReadAsStringAsync()));
+            foreach (var (schema, expected) in new (object Schema, string Expected)[]
+            {
+                (new { schemaVersion = 1, storeVersion = 1, recordVersions = new { document = new { version = 1 } } }, "accepted"),
+                (new { schemaVersion = 2, sequences = new Dictionary<string, object> { ["com.tldraw.document"] = 0 } }, "accepted"),
+                (new { schemaVersion = 2, sequences = new Dictionary<string, object> { ["com.tldraw.document"] = "invalid" } }, "rejected"),
+                (new { schemaVersion = "invalid" }, "rejected"),
+                (new { schemaVersion = 3 }, "rejected"),
+            })
+            {
+                var candidateId = Guid.NewGuid();
+                var whiteboardCandidate = new
+                {
+                    operationId = Guid.NewGuid(), entityType = "note", entityId = candidateId, action = "create", baseRevision = (string?)null,
+                    payload = new { title = "Schema validation", type = "whiteboard", contentSchemaVersion = 1, content = new { store = new Dictionary<string, object> { ["document:document"] = new { id = "document:document", typeName = "document" } }, schema } },
+                };
+                using var schemaResult = await Post(client, "/api/v1/mutations", new { operations = new[] { whiteboardCandidate } }, csrf);
+                Assert.Equal(expected, FirstMutationStatus(await schemaResult.Content.ReadAsStringAsync()));
+            }
             using var duplicateSetup = await Post(client, "/api/v1/setup", new { username = "another", password = "correct horse battery staple", confirmReset = true }, csrf,
                 ("X-Papyr-Setup-Token", "integration-test-bootstrap-secret-at-least-32-chars"));
             Assert.Equal(HttpStatusCode.Conflict, duplicateSetup.StatusCode);

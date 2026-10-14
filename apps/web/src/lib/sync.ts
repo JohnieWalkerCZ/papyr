@@ -12,6 +12,7 @@ import {
   releaseLocalLease,
   type LocalWriteLease,
   repairRejectedUnsyncedOperation,
+  retryRejectedWhiteboardSnapshot,
   resolveLocalConflict,
   type LocalConflict,
   type LocalEntity,
@@ -465,6 +466,18 @@ async function runScopedSync(database: typeof localDb, epoch: number, lease: Loc
         ))
       ) {
         console.warn("[Papyr sync] repairing missing create before unsynced delete", {
+          entityId: operation.entityId,
+          operationId: operation.operationId,
+        });
+        return pushOutbox();
+      } else if (
+        result.status === "rejected" &&
+        result.error?.code === "INVALID_CONTENT" &&
+        (await transaction(["entities", "outbox"], async () =>
+          retryRejectedWhiteboardSnapshot(operation.operationId, database),
+        ))
+      ) {
+        console.warn("[Papyr sync] retrying previously rejected whiteboard schema with a fresh operation ID", {
           entityId: operation.entityId,
           operationId: operation.operationId,
         });

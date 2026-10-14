@@ -495,3 +495,34 @@ test("a resumed editor preserves its original snapshot even after the shared not
   assert.equal(await db.entities.get(note.id), undefined);
   await db.delete();
 });
+
+test("rejected whiteboard v2 receipts get one fresh ID without changing snapshots or Trash", async () => {
+  const { retryRejectedWhiteboardSnapshot } = await import("../src/lib/local-db.ts");
+  const { readFile } = await import("node:fs/promises");
+  const content = JSON.parse(await readFile(new URL("../e2e/fixtures/whiteboard-v2.json", import.meta.url)));
+  const db = createLocalDb(`retry-whiteboard-${crypto.randomUUID()}`);
+  const note = await createNote("Recoverable canvas", "whiteboard", db);
+  await updateLocalNote(note.id, { content }, db);
+  await setDeletedLocalEntity(note.id, true, db);
+  const snapshot = await db.entities.get(note.id);
+  const pending = await db.outbox.orderBy("createdAt").toArray();
+  const operation = pending.find((item) => item.action === "update");
+  assert.equal(await retryRejectedWhiteboardSnapshot(pending[0].operationId, db), false);
+  assert.equal(await retryRejectedWhiteboardSnapshot(operation.operationId, db), true);
+  assert.deepEqual(await db.entities.get(note.id), snapshot);
+  const repaired = await db.outbox.orderBy("createdAt").toArray();
+  assert.deepEqual(repaired[1].payload, operation.payload);
+  assert.equal(repaired[1].baseRevision, operation.baseRevision);
+  assert.notEqual(repaired[1].operationId, operation.operationId);
+  assert.deepEqual(repaired[2], pending[2]);
+  assert.equal(await retryRejectedWhiteboardSnapshot(repaired[1].operationId, db), false);
+  assert.equal(await retryRejectedWhiteboardSnapshot(pending[2].operationId, db), false);
+  await db.outbox.update(pending[0].operationId, { payload: { ...note, content } });
+  db.outbox.hook("creating", () => {
+    throw new Error("quota full");
+  });
+  await assert.rejects(retryRejectedWhiteboardSnapshot(pending[0].operationId, db), /quota full/);
+  assert.equal(await db.outbox.count(), 3);
+  assert.deepEqual(await db.entities.get(note.id), snapshot);
+  await db.delete();
+});

@@ -405,15 +405,28 @@ public static class SyncEndpoints
     {
         if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("store", out var store) || store.ValueKind != JsonValueKind.Object ||
             !value.TryGetProperty("schema", out var schema) || schema.ValueKind != JsonValueKind.Object ||
-            !schema.TryGetProperty("schemaVersion", out var schemaVersion) || schemaVersion.ValueKind != JsonValueKind.Number ||
-            !schema.TryGetProperty("storeVersion", out var storeVersion) || storeVersion.ValueKind != JsonValueKind.Number ||
-            !schema.TryGetProperty("recordVersions", out var recordVersions) || recordVersions.ValueKind != JsonValueKind.Object ||
+            !schema.TryGetProperty("schemaVersion", out var schemaVersion) || schemaVersion.ValueKind != JsonValueKind.Number || !schemaVersion.TryGetInt32(out var version) ||
             store.EnumerateObject().Count() > 10_000)
             return false;
+        JsonElement recordVersions;
+        if (version == 1)
+        {
+            if (!schema.TryGetProperty("storeVersion", out var storeVersion) || storeVersion.ValueKind != JsonValueKind.Number ||
+                !schema.TryGetProperty("recordVersions", out recordVersions) || recordVersions.ValueKind != JsonValueKind.Object)
+                return false;
+        }
+        else if (version == 2)
+        {
+            if (!schema.TryGetProperty("sequences", out recordVersions) || recordVersions.ValueKind != JsonValueKind.Object ||
+                !recordVersions.EnumerateObject().All(sequence => sequence.Value.ValueKind == JsonValueKind.Number &&
+                    sequence.Value.TryGetInt32(out var sequenceVersion) && sequenceVersion >= 0))
+                return false;
+        }
+        else return false;
         return store.EnumerateObject().All(record => record.Value.ValueKind == JsonValueKind.Object &&
             record.Value.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() == record.Name &&
             record.Value.TryGetProperty("typeName", out var typeName) && typeName.ValueKind == JsonValueKind.String &&
-            recordVersions.TryGetProperty(typeName.GetString()!, out _));
+            recordVersions.TryGetProperty(version == 2 ? $"com.tldraw.{typeName.GetString()}" : typeName.GetString()!, out _));
     }
 
     private static async Task<List<EntityRecord>> DeleteFolderTree(PapyrDbContext db, Guid ownerId, EntityRecord root, CancellationToken cancellationToken)

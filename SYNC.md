@@ -69,6 +69,8 @@ For repeated `waiting` attempts before any `syncing` state, the durable lease de
 
 If a note delete is definitively rejected with `NOT_FOUND`, both its queued base revision and local revision are null, and no create is queued, repair the orphan outbox atomically: queue the preserved full note snapshot as a create, then the delete payload under a fresh operation ID. Keep the local Trash snapshot. Server acknowledgment of the create supplies the delete's base revision; the delete then produces an ordinary restorable tombstone. Acknowledged notes and missing folders are not recreated by this recovery. Permanent rejected receipts require fresh IDs for the repaired operations.
 
+Older APIs rejected current tldraw schema version 2 snapshots with `INVALID_CONTENT`. After deploying API support for both tldraw schema versions, a definitively rejected whiteboard create/update with a version 2 snapshot gets one atomic retry under a fresh operation ID. Preserve the exact queued snapshot/base revision/order and local Trash state; leave newer edits and dependent deletes intact. Mark the replacement's `attempts` as 1 so another rejection remains queued as an error instead of generating endless IDs. Never replace operation IDs after a timeout or another unknown outcome.
+
 - The server provides a per-account **opaque** cursor indicating an ordered committed prefix of its change log.
 - `GET /changes?cursor=X` returns committed events after X plus `nextCursor` and `hasMore`.
 - Each page is applied atomically with its cursor. Never advance a local cursor before its page contents are persisted.

@@ -1,5 +1,11 @@
 # DECISIONS.md — architecture decision log
 
+### Whiteboard sync — current tldraw snapshots and rejected receipt recovery (2026-10-14)
+
+- The sync log shows lease expiry recovery followed by a permanently rejected `create` receipt with `INVALID_CONTENT`. Independently verified that pinned tldraw 5.5.2 emits schema version 2 with `sequences`, while API validation required legacy `storeVersion`/`recordVersions`. Support both formats with bounded records, matching IDs/types, and integer sequence versions. Do not rewrite stored snapshots or change Papyr's outer content schema version.
+- For a whiteboard create/update definitively rejected with `INVALID_CONTENT` and a recognizable version 2 snapshot, atomically replace that exact outbox entry with the same payload, base revision, and ordering under a fresh operation ID. Retry once, tracked by `attempts`; retain it on another rejection or transport failure. Preserve the local entity, Trash status, dependent deletes, and all newer edits. Unknown outcomes still reuse the same operation ID.
+- Deploy the corrected API before or alongside the web client. There is no schema/data migration; rollback retains all snapshots but the previous API cannot accept version 2. User-provided browser metadata confirms the blocked trashed note is a whiteboard with schema version 2 and a sequences map.
+
 ### Sync waiting diagnostics — durable lease visibility (2026-10-14)
 
 - Repeated authenticated/online attempts ending in `waiting` before `syncing` mean durable lease acquisition was deferred. Restore acquisition, remaining lease time, heartbeat result, and release result diagnostics removed during the multi-client implementation. Log only timing/ownership outcomes, never note data or credentials.

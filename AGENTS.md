@@ -21,6 +21,7 @@ If two sources conflict, document the conflict in `DECISIONS.md`, prefer the saf
 5. Run the relevant automated tests and formatting/lint/typecheck/build steps available in the repo.
 6. Report files changed, user-visible behavior, tests executed with results, assumptions, unresolved risks, and next recommended phase. Never claim tests passed unless run.
 7. Update the documentation and decision record **in the same change** if contracts or requirements change.
+8. Commit and push completed changes by default, excluding unrelated local edits. Report the commit and any push failure.
 
 ## Rules that must not be broken
 
