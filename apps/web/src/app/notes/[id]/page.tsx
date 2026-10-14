@@ -88,6 +88,7 @@ function NoteEditor({ id }: { id: string }) {
   const persistedTitle = useRef("");
   const titleDraft = useRef("");
   const cancelTitleEdit = useRef(false);
+  const titleStatusBeforeEdit = useRef(status);
   const whiteboardDirty = useRef(false);
   const onWhiteboardDirtyChange = useCallback((dirty: boolean) => {
     whiteboardDirty.current = dirty;
@@ -338,6 +339,7 @@ function NoteEditor({ id }: { id: string }) {
     if (title === persistedTitle.current) {
       titleDraft.current = title;
       if (title !== current.title) setNote({ ...current, title });
+      setStatus(titleStatusBeforeEdit.current);
       return;
     }
     try {
@@ -447,8 +449,10 @@ function NoteEditor({ id }: { id: string }) {
               readOnly={!writer.canWrite}
               onChange={(event) => {
                 if (!writer.canWrite) return;
+                if (titleDraft.current === persistedTitle.current) titleStatusBeforeEdit.current = status;
                 titleDraft.current = event.target.value;
                 setNote({ ...note, title: event.target.value });
+                setStatus(locale.library.savingLocal);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -460,6 +464,7 @@ function NoteEditor({ id }: { id: string }) {
                   cancelTitleEdit.current = true;
                   titleDraft.current = persistedTitle.current;
                   setNote({ ...note, title: persistedTitle.current });
+                  setStatus(titleStatusBeforeEdit.current);
                   event.currentTarget.blur();
                 }
               }}

@@ -75,6 +75,7 @@ export const messages = {
       loadingError: "Couldn’t read the local library",
       saveError: "Couldn’t save locally. Your title is still here; try again.",
       search: "Search title and note text",
+      searchShort: "Search",
       sortBy: "Sort by",
       lastModified: "Last modified",
       dateCreated: "Date created",
@@ -374,6 +375,7 @@ export const messages = {
       loadingError: "Místní knihovnu se nepodařilo načíst",
       saveError: "Místně se nepodařilo uložit. Název zůstal zachován; zkuste to znovu.",
       search: "Hledat v názvech a textu poznámek",
+      searchShort: "Hledat",
       sortBy: "Řadit podle",
       lastModified: "Naposledy upraveno",
       dateCreated: "Datum vytvoření",
@@ -684,14 +686,13 @@ function subscribeToTheme(callback: () => void) {
 }
 function ThemeControl({ locale, theme }: { locale: Locale; theme: Theme }) {
   const copy = messages[locale].common;
-  const next: Theme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
-  const label = copy[theme];
   return (
-    <button
+    <select
       className="theme-control"
-      type="button"
-      aria-label={`${copy.theme}: ${label}`}
-      onClick={() => {
+      aria-label={copy.theme}
+      value={theme}
+      onChange={(event) => {
+        const next = event.target.value as Theme;
         try {
           if (next === "system") localStorage.removeItem("papyr-theme");
           else localStorage.setItem("papyr-theme", next);
@@ -702,8 +703,10 @@ function ThemeControl({ locale, theme }: { locale: Locale; theme: Theme }) {
         window.dispatchEvent(new Event("papyr-theme-change"));
       }}
     >
-      {label}
-    </button>
+      <option value="system">{copy.system}</option>
+      <option value="light">{copy.light}</option>
+      <option value="dark">{copy.dark}</option>
+    </select>
   );
 }
 
@@ -725,18 +728,21 @@ export function useCurrentLocale() {
 }
 
 function LocaleControl({ locale }: { locale: Locale }) {
-  const nextLocale = locale === "en" ? "cs" : "en";
   const copy = messages[locale].common;
   return (
-    <button
+    <select
       className="locale-control"
-      type="button"
-      lang={nextLocale}
-      aria-label={`${copy.language} · ${copy.switchLanguage}`}
-      onClick={() => setStoredLocale(nextLocale)}
+      aria-label={copy.languageLabel}
+      value={locale}
+      onChange={(event) => setStoredLocale(event.target.value as Locale)}
     >
-      {copy.language}
-    </button>
+      <option value="en" lang="en">
+        English
+      </option>
+      <option value="cs" lang="cs">
+        Čeština
+      </option>
+    </select>
   );
 }
 
@@ -746,14 +752,14 @@ export function LocaleSettingsControls() {
   const copy = messages[locale].common;
   return (
     <div className="preferences-controls">
-      <div className="preference-group">
+      <label className="preference-group">
         <span>{copy.theme}</span>
         <ThemeControl locale={locale} theme={theme} />
-      </div>
-      <div className="preference-group">
+      </label>
+      <label className="preference-group">
         <span>{copy.languageLabel}</span>
         <LocaleControl locale={locale} />
-      </div>
+      </label>
     </div>
   );
 }

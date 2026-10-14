@@ -39,6 +39,10 @@ test("implemented routes have no axe WCAG A/AA violations on desktop and mobile 
       expect(dimensions.scrollWidth, `${route} horizontal overflow at ${width}px`).toBeLessThanOrEqual(
         dimensions.width,
       );
+      if (route === "/" && width === 390) {
+        const heading = await page.getByRole("heading", { level: 1 }).boundingBox();
+        expect(heading?.y, "The closed mobile drawer must not push the library below the header").toBeLessThan(130);
+      }
       const background = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
       expect(background, `${route} ${colorScheme} palette at ${width}px`).toBe(
         colorScheme === "dark" ? "rgb(32, 38, 41)" : "rgb(245, 243, 238)",
@@ -57,9 +61,12 @@ test("empty-library creation actions create a local note and the New menu suppor
 
   await page.goto("/");
   const trigger = page.getByRole("button", { name: "New", exact: true });
-  await trigger.click();
-  await trigger.press("ArrowDown");
+  await trigger.press("ArrowUp");
   const menu = page.locator(".create-menu-popover");
+  await expect(menu.getByRole("button", { name: "Create folder" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await trigger.press("ArrowDown");
   await expect(menu.getByRole("button", { name: "Create Markdown note" })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(menu.getByRole("button", { name: "Create Typst note" })).toBeFocused();
@@ -92,7 +99,9 @@ test("Czech language persists and Typst narrow view switches source and preview"
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.locator(".app-header").getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Switch language to Czech" }).click();
+  const language = page.getByRole("combobox", { name: "Language", exact: true });
+  await expect(language).toHaveValue("en");
+  await language.selectOption("cs");
   await expect(page.locator("html")).toHaveAttribute("lang", "cs");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Knihovna");
   await page.goto("/typst");
@@ -146,19 +155,20 @@ test("Typst preview renders a readable PDF page at mobile width", async ({ page 
   await expect(page.getByRole("button", { name: "Reset zoom to fit width" })).not.toHaveText("125%");
 });
 
-test("theme preference cycles through light, dark and system and persists", async ({ page }) => {
+test("theme preference exposes light, dark and system choices and persists", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   await page.locator(".app-header").getByRole("button", { name: "Settings" }).click();
-  const theme = page.getByRole("button", { name: "Theme: System" });
-  await theme.click();
+  const theme = page.getByRole("combobox", { name: "Theme", exact: true });
+  await expect(theme).toHaveValue("system");
+  await theme.selectOption("light");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(245, 243, 238)");
-  await page.getByRole("button", { name: "Theme: Light" }).click();
+  await theme.selectOption("dark");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(32, 38, 41)");
   await page.reload();
   await page.locator(".app-header").getByRole("button", { name: "Settings" }).click();
-  await expect(page.getByRole("button", { name: "Theme: Dark" })).toBeVisible();
-  await page.getByRole("button", { name: "Theme: Dark" }).click();
+  await expect(theme).toHaveValue("dark");
+  await theme.selectOption("system");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(245, 243, 238)");
   await page.evaluate(() => localStorage.removeItem("papyr-theme"));
 });

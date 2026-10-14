@@ -37,6 +37,13 @@ export function CreateMenu({
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const [open, setOpen] = useState(false);
+  const focusOnOpen = useRef<"first" | "last" | null>(null);
+  useEffect(() => {
+    if (!open || !focusOnOpen.current) return;
+    const actions = menu.current?.querySelectorAll<HTMLButtonElement>(".create-option");
+    actions?.[focusOnOpen.current === "first" ? 0 : actions.length - 1]?.focus();
+    focusOnOpen.current = null;
+  }, [open]);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (!menu.current?.contains(event.target as Node)) setOpen(false);
@@ -48,6 +55,9 @@ export function CreateMenu({
     <div
       className={`create-menu unified-create-menu ${open ? "is-open" : ""}`}
       ref={menu}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) setOpen(false);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -57,15 +67,23 @@ export function CreateMenu({
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
           const actions = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".create-option"));
-          if (!actions.length) return;
           event.preventDefault();
+          if (!actions.length) {
+            focusOnOpen.current = event.key === "ArrowUp" || event.key === "End" ? "last" : "first";
+            setOpen(true);
+            return;
+          }
           const current = actions.indexOf(document.activeElement as HTMLButtonElement);
           const next =
             event.key === "Home"
               ? 0
               : event.key === "End"
                 ? actions.length - 1
-                : (current + (event.key === "ArrowDown" ? 1 : -1) + actions.length) % actions.length;
+                : current < 0
+                  ? event.key === "ArrowDown"
+                    ? 0
+                    : actions.length - 1
+                  : (current + (event.key === "ArrowDown" ? 1 : -1) + actions.length) % actions.length;
           actions[next].focus();
         }
       }}

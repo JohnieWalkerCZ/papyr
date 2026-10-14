@@ -754,11 +754,21 @@ export default function Home() {
             <span>{copy.trash}</span>
           ) : (
             <>
-              <button onClick={() => selectFolder(null)}>{copy.library}</button>
+              <button onClick={() => selectFolder(null)} aria-current={folderPath.length === 0 ? "page" : undefined}>
+                {copy.library}
+              </button>
               {folderPath.map((folder) => (
                 <span key={folder.id}>
-                  <span className="breadcrumb-separator">/</span>
-                  <button onClick={() => selectFolder(folder.id)}>{folder.title}</button>
+                  <span className="breadcrumb-separator" aria-hidden="true">
+                    /
+                  </span>
+                  <button
+                    onClick={() => selectFolder(folder.id)}
+                    title={folder.title}
+                    aria-current={folder.id === selectedFolder ? "page" : undefined}
+                  >
+                    {folder.title}
+                  </button>
                 </span>
               ))}
             </>
@@ -812,9 +822,13 @@ export default function Home() {
             onFolder={startFolder}
           />
         </div>
-        <button className="search-trigger" onClick={() => setSearchDialog(true)}>
+        <button
+          className="search-trigger"
+          title={`${copy.search} (${searchShortcut})`}
+          onClick={() => setSearchDialog(true)}
+        >
           <Icon name="search" />
-          <span>{copy.search}</span>
+          <span>{copy.searchShort}</span>
           <kbd>{searchShortcut}</kbd>
         </button>
         <nav className="sidebar-nav">

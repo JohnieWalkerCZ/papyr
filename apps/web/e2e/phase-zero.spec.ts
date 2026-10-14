@@ -123,6 +123,7 @@ test("document title commits on Enter, cancels on Escape, and replaces an empty 
   await createNote(page, "Initial title");
   const title = page.getByRole("textbox", { name: "Note title" });
   await title.fill("Discard this title");
+  await expect(page.locator(".document-titlebar .save-status")).toContainText("Saving on this device");
   await title.press("Escape");
   await expect(title).toHaveValue("Initial title");
   await title.fill("Saved title");
@@ -348,7 +349,7 @@ test("nested folders support note moves and local text search", async ({ page })
   await page.getByRole("button", { name: "Move item" }).click();
   await tree.getByRole("button", { name: "Physics" }).click();
   await expect(page.locator(".item-list a").filter({ hasText: "Sequences" })).toBeVisible();
-  await page.getByRole("button", { name: /Search title and note text/ }).click();
+  await page.getByRole("button", { name: /Search/ }).click();
   await page.getByPlaceholder("Search title and note text").fill("Fibonacci");
   await expect(page.getByRole("option", { name: /Sequences, markdown, School \/ Physics/ })).toBeVisible();
   await page.keyboard.press("Escape");
@@ -362,7 +363,7 @@ test("nested folders support note moves and local text search", async ({ page })
   await expect(page.getByRole("textbox", { name: "Typst source" })).toContainText("Integrals");
 });
 
-test("editor folder tree follows the explorer and Library returns to the root", async ({ page }) => {
+test("mobile editor breadcrumbs preserve parent navigation and Library returns to the root", async ({ page }) => {
   await page.goto("/");
   await createFolder(page, "Test folder");
   await page.getByRole("tree", { name: "Folders and notes" }).getByRole("button", { name: "Test folder" }).click();
@@ -370,9 +371,15 @@ test("editor folder tree follows the explorer and Library returns to the root", 
 
   const editorTree = page.getByRole("tree", { name: "Folders and notes" });
   await expect(editorTree.getByRole("treeitem")).toHaveAttribute("aria-selected", "true");
-  await page.locator(".app-sidebar").getByRole("link", { name: "Library" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const breadcrumbs = page.getByRole("navigation", { name: "Location" });
+  await breadcrumbs.getByRole("link", { name: "Test folder" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Test folder");
+  await expect(breadcrumbs.getByRole("button", { name: "Test folder" })).toHaveAttribute("aria-current", "page");
+  await breadcrumbs.getByRole("button", { name: "Library" }).click();
 
-  await expect(page).toHaveURL(/\/?folder=root/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Library");
+  await page.getByRole("button", { name: "Open navigation" }).click();
   await expect(page.locator(".app-sidebar").getByRole("button", { name: "Library" })).toHaveClass(/is-selected/);
   await expect(page.locator(".app-sidebar").getByRole("button", { name: "Test folder" })).toBeVisible();
 });

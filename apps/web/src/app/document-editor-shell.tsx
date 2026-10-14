@@ -257,10 +257,20 @@ export function DocumentEditorShell({
           {path.map((folder) => (
             <span key={folder.id}>
               {" "}
-              / <Link href={`/?folder=${folder.id}`}>{folder.title}</Link>
+              <span className="breadcrumb-separator" aria-hidden="true">
+                /
+              </span>
+              <Link href={`/?folder=${folder.id}`} title={folder.title}>
+                {folder.title}
+              </Link>
             </span>
           ))}
-          <span> / {note.title}</span>
+          <span className="breadcrumb-current" aria-current="page" title={note.title}>
+            <span className="breadcrumb-separator" aria-hidden="true">
+              /
+            </span>
+            {note.title}
+          </span>
         </nav>
         <div className="header-actions">
           <details className="sync-menu">
@@ -312,7 +322,8 @@ export function DocumentEditorShell({
             aria-label={copy.search}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={copy.search}
+            placeholder={copy.searchShort}
+            title={copy.search}
           />
           <kbd>{searchShortcut}</kbd>
         </label>
