@@ -510,6 +510,18 @@ export async function setDeletedLocalEntity(id: string, deleted: boolean, databa
   });
 }
 
+export async function releaseLocalSyncLock(lockOwner: string, database = localDb): Promise<boolean> {
+  return database.transaction("rw", database.syncMeta, async () => {
+    const current = await database.syncMeta.get("state");
+    if (current?.lockOwner !== lockOwner) return false;
+    const unlocked = { ...current };
+    delete unlocked.lockOwner;
+    delete unlocked.lockExpiresAt;
+    await database.syncMeta.put(unlocked);
+    return true;
+  });
+}
+
 export async function repairRejectedUnsyncedOperation(operationId: string, database = localDb): Promise<boolean> {
   return database.transaction("rw", database.entities, database.outbox, async () => {
     const operation = await database.outbox.get(operationId);

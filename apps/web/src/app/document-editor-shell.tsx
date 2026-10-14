@@ -83,6 +83,7 @@ export function DocumentEditorShell({
       const detail = (event as CustomEvent<{ state: string; message: string }>).detail;
       const labels: Record<string, string> = {
         syncing: copy.syncing,
+        waiting: copy.syncWaiting,
         synced: copy.synced,
         offline: copy.offline,
         error: copy.syncError,
@@ -110,7 +111,16 @@ export function DocumentEditorShell({
       window.removeEventListener("papyr-sync-state", onSync);
       window.removeEventListener("keydown", onKey);
     };
-  }, [copy.authRequired, copy.conflictStatus, copy.offline, copy.syncError, copy.synced, copy.syncing, path]);
+  }, [
+    copy.authRequired,
+    copy.conflictStatus,
+    copy.offline,
+    copy.syncError,
+    copy.synced,
+    copy.syncing,
+    copy.syncWaiting,
+    path,
+  ]);
   useEffect(() => {
     const closePopovers = (event: PointerEvent) => {
       const path = event.composedPath();
@@ -240,7 +250,7 @@ export function DocumentEditorShell({
         <div className="header-actions">
           <details className="sync-menu">
             <summary
-              className={`sync-indicator ${conflictCount ? "has-conflicts" : ""} ${syncState === "synced" || syncStatus === copy.synced ? "is-good" : syncState === "syncing" || syncStatus === copy.syncing ? "is-syncing" : syncState === "offline" || syncState === "authRequired" || syncStatus === copy.pendingSync || syncStatus === copy.offline || syncStatus === copy.authRequired ? "is-pending" : syncState === "error" || syncState === "conflict" || syncStatus === copy.syncError || syncStatus === copy.conflictStatus ? "is-error" : ""}`}
+              className={`sync-indicator ${conflictCount ? "has-conflicts" : ""} ${syncState === "synced" || syncStatus === copy.synced ? "is-good" : syncState === "syncing" || syncStatus === copy.syncing ? "is-syncing" : syncState === "waiting" || syncState === "offline" || syncState === "authRequired" || syncStatus === copy.pendingSync || syncStatus === copy.offline || syncStatus === copy.authRequired ? "is-pending" : syncState === "error" || syncState === "conflict" || syncStatus === copy.syncError || syncStatus === copy.conflictStatus ? "is-error" : ""}`}
               aria-label={`${copy.syncStatus}: ${conflictCount ? copy.conflictCount(conflictCount) : syncStatus}`}
             >
               {conflictCount > 0 && <AlertTriangle aria-hidden="true" className="sync-warning" size={15} />}

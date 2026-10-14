@@ -122,6 +122,7 @@ export default function Home() {
       const detail = (event as CustomEvent<{ state: string; message: string }>).detail;
       const labels: Record<string, string> = {
         syncing: copy.syncing,
+        waiting: copy.syncWaiting,
         synced: copy.synced,
         offline: copy.offline,
         error: copy.syncError,
@@ -758,7 +759,7 @@ export default function Home() {
         <div className="header-actions">
           <details className="sync-menu">
             <summary
-              className={`sync-indicator ${conflicts.length ? "has-conflicts" : ""} ${status === copy.synced ? "is-good" : status === copy.syncing ? "is-syncing" : status === copy.pendingSync || status === copy.offline || status === copy.authRequired ? "is-pending" : status === copy.syncError ? "is-error" : ""}`}
+              className={`sync-indicator ${conflicts.length ? "has-conflicts" : ""} ${status === copy.synced ? "is-good" : status === copy.syncing ? "is-syncing" : status === copy.pendingSync || status === copy.syncWaiting || status === copy.offline || status === copy.authRequired ? "is-pending" : status === copy.syncError ? "is-error" : ""}`}
               aria-label={`${copy.syncStatus}: ${conflicts.length ? copy.conflictCount(conflicts.length) : status}`}
             >
               {conflicts.length > 0 && (

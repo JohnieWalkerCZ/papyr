@@ -1,5 +1,10 @@
 # DECISIONS.md — architecture decision log
 
+### Sync lock recovery — deferred fallback attempts (2026-10-14)
+
+- Logs confirmed authenticated, online sync attempts stopped at an unexpired IndexedDB lease and returned idle without scheduling another attempt. Add a localized `waiting` state and automatic retries within five seconds, respecting active lease expiry. Preserve the existing lease duration and ownership checks rather than stealing locks or clearing browser storage.
+- Capture the account database for heartbeat/release and make release's owner check and metadata update atomic, preventing an old owner from clearing a successor's lock or overwriting a newer cursor. No schema/data migration is needed; existing leases remain valid until their original expiry.
+
 ### Browser diagnostics — networking and sync stalls (2026-10-14)
 
 - User requested console diagnostics for a persistent pending-sync state. Instrument all API/CSRF/attachment fetches and sync coordination with request status/timing, error codes/references, retry and lock stages, authentication/online flags, pending-operation counts, and receipt metadata. Exclude body/header/query values and raw exceptions to protect private notes and credentials.

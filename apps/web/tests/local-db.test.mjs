@@ -13,6 +13,7 @@ import {
   resolveLocalConflict,
   renameLocalEntity,
   repairRejectedUnsyncedOperation,
+  releaseLocalSyncLock,
   setDeletedLocalEntity,
   storeLocalAttachment,
   updateLocalNote,
@@ -38,6 +39,28 @@ test("orphan unsynced delete is repaired without losing the Trash snapshot", asy
   assert.deepEqual(repaired[1].payload, original[0].payload);
   assert.deepEqual(await db.entities.get(note.id), snapshot);
   assert.equal(await repairRejectedUnsyncedOperation(repaired[1].operationId, db), false);
+  await db.delete();
+});
+
+test("sync lock release preserves current metadata and never clears a successor's lock", async () => {
+  const db = createLocalDb(`sync-lock-${crypto.randomUUID()}`);
+  const meta = {
+    id: "state",
+    cursor: "seq:9",
+    bootstrapToken: null,
+    acceptedOperationIds: ["accepted"],
+    updatedAt: 9,
+    lockOwner: "new-owner",
+    lockExpiresAt: Date.now() + 300_000,
+  };
+  await db.syncMeta.put(meta);
+  assert.equal(await releaseLocalSyncLock("old-owner", db), false);
+  assert.deepEqual(await db.syncMeta.get("state"), meta);
+  assert.equal(await releaseLocalSyncLock("new-owner", db), true);
+  const expected = { ...meta };
+  delete expected.lockOwner;
+  delete expected.lockExpiresAt;
+  assert.deepEqual(await db.syncMeta.get("state"), expected);
   await db.delete();
 });
 

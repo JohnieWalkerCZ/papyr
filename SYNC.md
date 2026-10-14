@@ -88,6 +88,8 @@ Folder conflicts: show the destination/name problem; allow retry at root or choo
 
 ## 7. Tabs and device concurrency
 
+When the IndexedDB fallback finds another unexpired sync lease, report `waiting` and automatically retry at most five seconds later (or just after lease expiry, whichever is sooner). Never clear an unexpired lease merely because another attempt wants to sync. Release a lease in one IndexedDB transaction with the owner check and removal, preserving all current cursor metadata; heartbeat/release use the database captured when the lock was acquired. A closed tab's existing five-minute lease is respected until expiry, then pending operations resume automatically.
+
 - Use BroadcastChannel and Web Locks where supported to coordinate per-account sync; provide a safe fallback if Web Locks are unavailable.
 - Editing the **same note in two tabs of one browser profile** should have a single active writer or prominent read-only/lock takeover flow. Separate browser profiles/devices use normal server optimistic concurrency.
 - SignalR is a hint; do not use its event stream as authoritative change history.

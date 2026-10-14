@@ -5,6 +5,7 @@ import { retryTransient } from "@/lib/sync-retry";
 import { safeErrorDetails } from "@/lib/network-diagnostics";
 import {
   localDb,
+  releaseLocalSyncLock,
   repairRejectedUnsyncedOperation,
   resolveLocalConflict,
   type LocalConflict,
@@ -16,7 +17,7 @@ import {
   type LocalAsset,
 } from "@/lib/local-db";
 
-export type SyncState = "idle" | "syncing" | "synced" | "offline" | "authRequired" | "conflict" | "error";
+export type SyncState = "idle" | "waiting" | "syncing" | "synced" | "offline" | "authRequired" | "conflict" | "error";
 
 let authenticated = false;
 let activeSync: Promise<SyncState> | undefined;
@@ -501,26 +502,34 @@ async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> 
     });
   }
   console.info("[Papyr sync] acquiring IndexedDB lock");
+  const database = localDb;
+  let retryDelay = 5000;
   const lockId = createUuid();
-  const acquired = await localDb.transaction("rw", localDb.syncMeta, async () => {
-    const state = (await localDb.syncMeta.get("state")) ?? blankMeta();
+  const acquired = await database.transaction("rw", database.syncMeta, async () => {
+    const state = (await database.syncMeta.get("state")) ?? blankMeta();
     if (state.lockExpiresAt && state.lockExpiresAt > Date.now()) {
+      retryDelay = Math.min(5000, Math.max(100, state.lockExpiresAt - Date.now() + 50));
       console.warn("[Papyr sync] deferred: another tab holds the IndexedDB lock", {
         expiresAt: new Date(state.lockExpiresAt).toISOString(),
+        retryDelayMs: retryDelay,
       });
       return false;
     }
-    await localDb.syncMeta.put({ ...state, lockOwner: lockId, lockExpiresAt: Date.now() + 300_000 });
+    await database.syncMeta.put({ ...state, lockOwner: lockId, lockExpiresAt: Date.now() + 300_000 });
     return true;
   });
-  if (!acquired) return "idle";
+  if (!acquired) {
+    announce("waiting", "Waiting for another tab to finish syncing.");
+    scheduleSync(retryDelay);
+    return "waiting";
+  }
   console.info("[Papyr sync] IndexedDB lock acquired");
   const heartbeat = setInterval(() => {
-    void localDb
-      .transaction("rw", localDb.syncMeta, async () => {
-        const current = await localDb.syncMeta.get("state");
+    void database
+      .transaction("rw", database.syncMeta, async () => {
+        const current = await database.syncMeta.get("state");
         if (current?.lockOwner === lockId) {
-          await localDb.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 300_000 });
+          await database.syncMeta.put({ ...current, lockExpiresAt: Date.now() + 300_000 });
         }
       })
       .catch((error) => console.error("[Papyr sync] lock heartbeat failed", safeErrorDetails(error)));
@@ -529,12 +538,7 @@ async function withSyncLock(work: () => Promise<SyncState>): Promise<SyncState> 
     return await work();
   } finally {
     clearInterval(heartbeat);
-    const current = await syncMeta();
-    if (current.lockOwner === lockId) {
-      const unlocked = { ...current };
-      delete unlocked.lockOwner;
-      delete unlocked.lockExpiresAt;
-      await localDb.syncMeta.put(unlocked);
+    if (await releaseLocalSyncLock(lockId, database)) {
       console.info("[Papyr sync] IndexedDB lock released");
     }
   }
