@@ -17,6 +17,7 @@ import {
 } from "@/lib/local-db";
 import { useLocale } from "@/lib/locale";
 import { scheduleSync } from "@/lib/sync";
+import { restorePenEraserTool, updatePenEraserTool } from "@/lib/whiteboard-pen";
 
 const tldrawAssetUrls = getAssetUrls({ baseUrl: "/tldraw" });
 
@@ -49,12 +50,14 @@ export default function WhiteboardProof({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imageInput = useRef<HTMLInputElement>(null);
+  const canvasRoot = useRef<HTMLDivElement>(null);
   const editorRoot = useRef<HTMLElement>(null);
   const exportMenu = useRef<HTMLDetailsElement>(null);
   const latestSnapshot = useRef<unknown>(undefined);
   const assetUrls = useRef(new Map<string, string>());
   const [fullscreen, setFullscreen] = useState(false);
   const canWriteRef = useRef(canWrite);
+  const previousPenTool = useRef<string | null>(null);
   const revisionRef = useRef(revision);
   const originalNoteRef = useRef(originalNote);
   useLayoutEffect(() => {
@@ -114,6 +117,23 @@ export default function WhiteboardProof({
   useEffect(() => {
     editor?.user.updateUserPreferences({ colorScheme: "system" });
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const canvas = canvasRoot.current;
+    const restoreTool = () => restorePenEraserTool(editor, previousPenTool);
+    window.addEventListener("blur", restoreTool);
+    canvas?.addEventListener("pointerleave", restoreTool);
+    return () => {
+      window.removeEventListener("blur", restoreTool);
+      canvas?.removeEventListener("pointerleave", restoreTool);
+      restoreTool();
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    if (!canWrite && editor) restorePenEraserTool(editor, previousPenTool);
+  }, [canWrite, editor]);
 
   useEffect(() => {
     const onFullscreen = () => setFullscreen(document.fullscreenElement === editorRoot.current);
@@ -389,7 +409,26 @@ export default function WhiteboardProof({
           {status}
         </p>
       </div>
-      <div className="canvas" inert={!canWrite}>
+      <div
+        className="canvas"
+        ref={canvasRoot}
+        inert={!canWrite}
+        onPointerDownCapture={(event) => {
+          if (editor && canWriteRef.current) updatePenEraserTool(editor, event.nativeEvent, previousPenTool);
+        }}
+        onPointerMoveCapture={(event) => {
+          if (editor && canWriteRef.current) updatePenEraserTool(editor, event.nativeEvent, previousPenTool);
+        }}
+        onPointerUpCapture={(event) => {
+          if (editor && canWriteRef.current) updatePenEraserTool(editor, event.nativeEvent, previousPenTool);
+        }}
+        onPointerCancelCapture={() => {
+          if (editor) restorePenEraserTool(editor, previousPenTool);
+        }}
+        onContextMenuCapture={(event) => {
+          if ((event.nativeEvent as PointerEvent).pointerType === "pen") event.preventDefault();
+        }}
+      >
         {loadFailed ? (
           <div className="whiteboard-load-error" role="alert">
             <p>{copy.loadError}</p>
