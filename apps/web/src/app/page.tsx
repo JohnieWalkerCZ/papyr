@@ -32,6 +32,7 @@ import { initializeSyncTriggers, localConflicts, resolveConflict, scheduleSync, 
 import type { LocalConflict } from "@/lib/local-db";
 import { compareTextVersions } from "@/lib/conflict-diff";
 import { CreateActions, CreateMenu } from "./document-creation-menu";
+import { FullscreenToggle } from "./fullscreen-toggle";
 import { InstallPwa } from "./install-pwa";
 import { createLocalDocument } from "@/lib/create-document";
 import { useSidebarWidth } from "@/lib/use-sidebar-width";
@@ -803,6 +804,7 @@ export default function Home() {
               </button>
             </div>
           </details>
+          <FullscreenToggle />
           <button
             className="icon-button"
             aria-label={copy.settings}

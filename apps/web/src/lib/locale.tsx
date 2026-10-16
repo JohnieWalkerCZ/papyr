@@ -99,6 +99,8 @@ export const messages = {
       settingsDescription: "Account and device preferences",
       installApp: "Install Papyr",
       installIosHelp: "To install Papyr, tap Share in Safari, then Add to Home Screen.",
+      enterFullscreen: "Enter fullscreen",
+      exitFullscreen: "Exit fullscreen",
       account: "Account",
       serverSync: "Server and sync",
       serverSyncDescription:
@@ -401,6 +403,8 @@ export const messages = {
       settingsDescription: "Účet a předvolby zařízení",
       installApp: "Nainstalovat Papyr",
       installIosHelp: "Chcete-li Papyr nainstalovat, klepněte v Safari na Sdílet a potom na Přidat na plochu.",
+      enterFullscreen: "Zobrazit na celou obrazovku",
+      exitFullscreen: "Ukončit celou obrazovku",
       account: "Účet",
       serverSync: "Server a synchronizace",
       serverSyncDescription:
