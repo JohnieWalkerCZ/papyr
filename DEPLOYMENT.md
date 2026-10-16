@@ -54,7 +54,7 @@ Set `PAPYR_DB_PASSWORD` and `PAPYR_INITIAL_SETUP_TOKEN` to unique strong values 
 
 If the API exits during startup and Portainer does not retain its logs, temporarily set the stack variable `PAPYR_API_DIAGNOSTICS=true` and set `PAPYR_API_START_CONDITION=service_started`, then redeploy. The API logs its architecture and .NET runtime details; if startup fails, it keeps the container available for log inspection for one hour. The second setting lets the web container start even while the API is unhealthy, so Compose can finish deploying and Portainer can retain the API container. Read the API container logs in Portainer, then set `PAPYR_API_DIAGNOSTICS=false` and `PAPYR_API_START_CONDITION=service_healthy` and redeploy. The API may show as unhealthy while diagnostic mode is active.
 
-The web app is available on host port `6767` by default (container port `3000`). Set `PAPYR_WEB_PORT=6767` in Portainer if it has a previous value saved. This port listens on all host interfaces. The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all four values consistently.
+The web app is available on host port `6767` by default (container port `3000`). Set `PAPYR_WEB_PORT=6767` in Portainer if it has a previous value saved. This port listens on all host interfaces. The default Docker subnet is `10.253.0.0/24`. If Portainer already has the old `172.29.0.0/24` values saved, update `PAPYR_NETWORK_SUBNET` to `10.253.0.0/24`, `PAPYR_WEB_IP` to `10.253.0.2`, `PAPYR_API_IP` to `10.253.0.3`, and `PAPYR_DB_IP` to `10.253.0.4`, and `PAPYR_PROXY_IP` to `10.253.0.5` (or remove those overrides to use the Compose defaults). If the new subnet also overlaps on your host, choose a free private `/24` and set all five values consistently. To enable the `tls` profile in Portainer, add the `PAPYR_DOMAIN` variable with the public hostname.
 
 ### Capture startup when Portainer removes failed containers
 
@@ -72,7 +72,15 @@ If the failure happens before any container starts, the saved Compose/build erro
 
 ## Public HTTPS hosting
 
-Use a reverse proxy or load balancer that terminates TLS and forwards the same public hostname to the `web` service. The web app routes `/api/v1/` and `/hubs/` to the API, so clients should use one origin. Preserve those paths, allow WebSocket upgrades for `/hubs/`, and set request and proxy timeouts high enough for attachment uploads. Enable HTTPS before users sign in.
+HTTPS is required for PWA installation: browsers only register the service worker and offer "Install app" in a secure context, so plain `http://host:6767` can never be installed as a PWA.
+
+The Compose stack ships an optional Caddy reverse proxy (profile `tls`) that terminates TLS with an automatic Let's Encrypt certificate and forwards the same public hostname to the `web` service. The web app routes `/api/v1/` and `/hubs/` to the API, so clients keep using one origin; Caddy passes WebSocket upgrades for `/hubs/` through transparently.
+
+1. Point a public DNS name at the host and open ports 80/443.
+2. Set `PAPYR_DOMAIN` to that hostname and `PAPYR_COOKIE_SECURE=true`.
+3. From `infra/`, start with the profile: `docker compose --profile tls up -d --build`.
+
+Alternatively, use your own reverse proxy or load balancer that terminates TLS and forwards the same public hostname to the `web` service. Preserve the `/api/v1/` and `/hubs/` paths, allow WebSocket upgrades for `/hubs/`, and set request and proxy timeouts high enough for attachment uploads. Enable HTTPS before users sign in.
 
 For a public deployment:
 
@@ -106,7 +114,8 @@ The supplied `infra/compose.yaml` reads these values from a local `.env` file in
 | `PAPYR_MIGRATE_ON_STARTUP` | Apply EF Core migrations when the API starts | Defaults to `true`; see the multi-replica note above. |
 | `PAPYR_MAX_ASSET_STORAGE_BYTES` | Per-owner attachment quota | Defaults to 1 GiB. |
 | `PAPYR_WEB_PORT` | Host port published for the web service | Defaults to 6767; keep the service private behind the proxy. |
-| `PAPYR_NETWORK_SUBNET`, `PAPYR_WEB_IP`, `PAPYR_API_IP`, `PAPYR_DB_IP` | Private Compose network addressing | Change together only if the default subnet overlaps another Docker network. |
+| `PAPYR_NETWORK_SUBNET`, `PAPYR_WEB_IP`, `PAPYR_API_IP`, `PAPYR_DB_IP`, `PAPYR_PROXY_IP` | Private Compose network addressing | Change together only if the default subnet overlaps another Docker network. |
+| `PAPYR_DOMAIN` | Public hostname for the optional TLS proxy (profile `tls`) | Public DNS name pointing at the host; required to enable the `tls` profile. Caddy obtains a Let's Encrypt certificate automatically. |
 | `NEXT_PUBLIC_TLDRAW_LICENSE_KEY` | Build-time whiteboard license key | Optional; use only with a license valid for this deployment. |
 
 The Next.js API origin is set at image build time through `PAPYR_API_ORIGIN` (the supplied Compose build sets it to `http://api:8080`). For a custom deployment, preserve the internal API origin reachable by the web container. The public browser-facing API path remains same-origin through Next.js rewrites.

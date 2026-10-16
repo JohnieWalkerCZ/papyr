@@ -1,0 +1,14 @@
+# Papyr TLS entrypoint for the Compose "tls" profile.
+#
+# PAPYR_DOMAIN must be a public DNS name pointing at this host, with ports
+# 80 and 443 reachable. Caddy obtains and renews a Let's Encrypt certificate
+# automatically and proxies everything (pages, /api/v1/*, /hubs/* websockets)
+# to the web service, keeping a single public origin as the app expects.
+#
+# HTTPS is required for PWA installation: browsers only register the service
+# worker (and offer "Install app") in a secure context, so plain
+# http://host:6767 can never be installed as a PWA.
+
+{$PAPYR_DOMAIN} {
+	reverse_proxy web:3000
+}
