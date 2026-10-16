@@ -24,6 +24,7 @@ import { useLocale, usePlatformSearchShortcut, LocaleSettingsControls } from "@/
 import { localConflicts, scheduleSync, syncLocalLibrary } from "@/lib/sync";
 import { AuthPanel } from "./auth-panel";
 import { CreateMenu } from "./document-creation-menu";
+import { InstallPwa } from "./install-pwa";
 import { useSidebarWidth } from "@/lib/use-sidebar-width";
 
 export function DocumentEditorShell({
@@ -410,6 +411,8 @@ export function DocumentEditorShell({
           <h3>{copy.account}</h3>
           <AuthPanel />
           <LocaleSettingsControls />
+          <h3>{copy.installApp}</h3>
+          <InstallPwa />
           <h3>{copy.serverSync}</h3>
           <p>{copy.serverSyncDescription}</p>
         </dialog>

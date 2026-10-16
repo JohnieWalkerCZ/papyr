@@ -32,6 +32,7 @@ import { initializeSyncTriggers, localConflicts, resolveConflict, scheduleSync, 
 import type { LocalConflict } from "@/lib/local-db";
 import { compareTextVersions } from "@/lib/conflict-diff";
 import { CreateActions, CreateMenu } from "./document-creation-menu";
+import { InstallPwa } from "./install-pwa";
 import { createLocalDocument } from "@/lib/create-document";
 import { useSidebarWidth } from "@/lib/use-sidebar-width";
 
@@ -1312,6 +1313,8 @@ export default function Home() {
         <h3>{copy.account}</h3>
         <AuthPanel />
         <LocaleSettingsControls />
+        <h3>{copy.installApp}</h3>
+        <InstallPwa />
         <h3>{copy.serverSync}</h3>
         <p className="dialog-note">{copy.serverSyncDescription}</p>
         <p className="dialog-status">

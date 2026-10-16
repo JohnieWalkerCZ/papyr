@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   title: "Papyr — private notes, on your device",
   description: "A self-hosted, local-first notebook.",
   manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Papyr", statusBarStyle: "default" },
+  icons: { apple: "/icons/papyr-192.png" },
 };
 
 export const viewport: Viewport = { themeColor: "#f5f3ee", width: "device-width", initialScale: 1 };

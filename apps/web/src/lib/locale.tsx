@@ -97,6 +97,8 @@ export const messages = {
       recent: "Recent",
       settings: "Settings",
       settingsDescription: "Account and device preferences",
+      installApp: "Install Papyr",
+      installIosHelp: "To install Papyr, tap Share in Safari, then Add to Home Screen.",
       account: "Account",
       serverSync: "Server and sync",
       serverSyncDescription:
@@ -397,6 +399,8 @@ export const messages = {
       recent: "Nedávné",
       settings: "Nastavení",
       settingsDescription: "Účet a předvolby zařízení",
+      installApp: "Nainstalovat Papyr",
+      installIosHelp: "Chcete-li Papyr nainstalovat, klepněte v Safari na Sdílet a potom na Přidat na plochu.",
       account: "Účet",
       serverSync: "Server a synchronizace",
       serverSyncDescription:
