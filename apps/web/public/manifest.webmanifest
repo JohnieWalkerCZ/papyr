@@ -2,8 +2,11 @@
   "name": "Papyr",
   "short_name": "Papyr",
   "description": "A self-hosted, local-first notebook.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "prefer_related_applications": false,
   "background_color": "#f5f3ee",
   "theme_color": "#f5f3ee",
   "icons": [
