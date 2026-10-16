@@ -24,6 +24,7 @@ import { useLocale, usePlatformSearchShortcut, LocaleSettingsControls } from "@/
 import { localConflicts, scheduleSync, syncLocalLibrary } from "@/lib/sync";
 import { AuthPanel } from "./auth-panel";
 import { CreateMenu } from "./document-creation-menu";
+import { FullscreenToggle } from "./fullscreen-toggle";
 import { InstallPwa } from "./install-pwa";
 import { useSidebarWidth } from "@/lib/use-sidebar-width";
 
@@ -297,6 +298,7 @@ export function DocumentEditorShell({
               </button>
             </div>
           </details>
+          <FullscreenToggle />
           <button
             className="icon-button"
             aria-label={copy.settings}
