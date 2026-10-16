@@ -19,6 +19,32 @@ services:
       api:
         condition: ${PAPYR_API_START_CONDITION:-service_healthy}
 
+  # Optional TLS entrypoint (Compose profile "tls"). Terminates HTTPS with an
+  # automatic Let's Encrypt certificate and forwards one public origin to the
+  # web service. HTTPS is required for PWA installation: browsers only
+  # register the service worker (and offer "Install app") in a secure context.
+  # Enable with: docker compose --profile tls up -d --build (from infra/),
+  # with PAPYR_DOMAIN set to a public DNS name and PAPYR_COOKIE_SECURE=true.
+  proxy:
+    image: caddy:2.10-alpine
+    profiles: ["tls"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - papyr-caddy-data:/data
+      - papyr-caddy-config:/config
+    environment:
+      PAPYR_DOMAIN: ${PAPYR_DOMAIN:?Set PAPYR_DOMAIN to a public DNS name pointing at this host to enable the "tls" profile}
+    networks:
+      papyr:
+        ipv4_address: ${PAPYR_PROXY_IP:-10.253.0.5}
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
   api:
     build:
       context: ..
@@ -122,6 +148,8 @@ volumes:
   papyr-postgres:
   papyr-assets:
   papyr-db-socket:
+  papyr-caddy-data:
+  papyr-caddy-config:
 
 networks:
   papyr:
